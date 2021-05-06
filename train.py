@@ -58,8 +58,8 @@ if __name__ == "__main__":
     #   训练自己的数据集时提示维度不匹配正常
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
-    model_path = r"model_data/centernet_resnet50_voc.h5"
-    model.load_weights(model_path,by_name=True,skip_mismatch=True)
+    # model_path = r"model_data/centernet_resnet50_voc.h5"
+    # model.load_weights(model_path,by_name=True,skip_mismatch=True)
 
     #----------------------------------------------------#
     #   获得图片路径和标签
@@ -94,10 +94,8 @@ if __name__ == "__main__":
 
     if backbone == "resnet50":
         freeze_layer = 171
-    elif backbone == "hourglass":
-        freeze_layer = 624
     else:
-        raise ValueError('Unsupported backbone - `{}`, Use resnet50, hourglass.'.format(backbone))
+        raise ValueError('Unsupported backbone - `{}`, Use resnet50.'.format(backbone))
 
     for i in range(freeze_layer):
         model.layers[i].trainable = False
@@ -119,7 +117,7 @@ if __name__ == "__main__":
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
         model.compile(
-            loss={'centernet_loss': lambda y_true, y_pred: y_pred},
+            loss={'centernet_loss_sum': lambda y_true, y_pred: y_pred},
             optimizer=keras.optimizers.Adam(Lr)
         )
 
@@ -144,7 +142,7 @@ if __name__ == "__main__":
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
         model.compile(
-            loss={'centernet_loss': lambda y_true, y_pred: y_pred},
+            loss={'centernet_loss_sum': lambda y_true, y_pred: y_pred},
             optimizer=keras.optimizers.Adam(Lr)
         )
 

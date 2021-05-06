@@ -6,7 +6,7 @@ from tensorflow.keras.layers import (Activation, BatchNormalization, Conv2D,
 from tensorflow.keras.models import Model
 from tensorflow.keras.regularizers import l2
 
-from nets.center_training import loss
+from nets.center_training import loss, loss_sum
 from nets.hourglass import HourglassNetwork
 from nets.resnet import ResNet50, centernet_head
 
@@ -118,12 +118,14 @@ def decode(hm, wh, reg, max_objects=100,num_classes=20):
 
 
 def centernet(input_shape, num_classes, backbone='resnet50', max_objects=100, mode="train", num_stacks=2):
-    assert backbone in ['resnet50', 'hourglass']
+    assert backbone in ['resnet50']
     output_size = input_shape[0] // 4
     image_input = Input(shape=input_shape)
-    hm_input = Input(shape=(output_size, output_size, num_classes))
-    wh_input = Input(shape=(max_objects, 2))
-    reg_input = Input(shape=(max_objects, 2))
+    cls_input = Input(shape=(max_objects, num_classes))
+    # hm_input = Input(shape=(output_size, output_size, num_classes))
+    # wh_input = Input(shape=(max_objects, 2))
+    # reg_input = Input(shape=(max_objects, 2))
+    loc_input = Input(shape=(max_objects, 4))
     reg_mask_input = Input(shape=(max_objects,))
     index_input = Input(shape=(max_objects,))
 
@@ -139,34 +141,21 @@ def centernet(input_shape, num_classes, backbone='resnet50', max_objects=100, mo
         #                                                              -> 128, 128, 64 -> 128, 128, 2
         #                                                              -> 128, 128, 64 -> 128, 128, 2
         #--------------------------------------------------------------------------------------------------------#
-        y1, y2, y3 = centernet_head(C5,num_classes)
+        # y1, y2, y3 = centernet_head(C5,num_classes)
+        # if mode=="train":
+        #     loss_ = Lambda(loss, name='centernet_loss')([y1, y2, y3, hm_input, wh_input, reg_input, reg_mask_input, index_input])
+        #     model = Model(inputs=[image_input, hm_input, wh_input, reg_input, reg_mask_input, index_input], outputs=[loss_])
+        #     return model
+        y1, y2 = centernet_head(C5, num_classes)
 
         if mode=="train":
-            loss_ = Lambda(loss, name='centernet_loss')([y1, y2, y3, hm_input, wh_input, reg_input, reg_mask_input, index_input])
-            model = Model(inputs=[image_input, hm_input, wh_input, reg_input, reg_mask_input, index_input], outputs=[loss_])
+            loss_ = Lambda(loss, name='centernet_loss')([y1, y2, cls_input, loc_input, reg_mask_input, index_input])
+            loss_sum_ = Lambda(loss_sum, name='centernet_loss_sum')([loss_, cls_input])
+            model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input, index_input], outputs=[loss_sum_])
             return model
         else:
             detections = Lambda(lambda x: decode(*x, max_objects=max_objects,
-                                                num_classes=num_classes))([y1, y2, y3])
+                                                num_classes=num_classes))([y1, y2])
             prediction_model = Model(inputs=image_input, outputs=detections)
             return prediction_model
 
-    else:
-        outs = HourglassNetwork(image_input,num_stacks,num_classes)
-
-        if mode=="train":
-            loss_all = []
-            for out in outs:  
-                y1, y2, y3 = out
-                loss_ = Lambda(loss)([y1, y2, y3, hm_input, wh_input, reg_input, reg_mask_input, index_input])
-                loss_all.append(loss_)
-            loss_all = Lambda(tf.reduce_mean,name='centernet_loss')(loss_all)
-
-            model = Model(inputs=[image_input, hm_input, wh_input, reg_input, reg_mask_input, index_input], outputs=loss_all)
-            return model
-        else:
-            y1, y2, y3 = outs[-1]
-            detections = Lambda(lambda x: decode(*x, max_objects=max_objects,
-                                                num_classes=num_classes))([y1, y2, y3])
-            prediction_model = Model(inputs=image_input, outputs=[detections])
-            return prediction_model
