@@ -44,27 +44,25 @@ def topk(hm, max_objects=100):
     indices = ys * w + xs
     return scores, indices, class_ids, xs, ys
 
-def decode(hm, wh, reg, max_objects=100,num_classes=20):
+def decode(cls_pred, loc_pred, reg, max_objects=100,num_classes=20):
     #-----------------------------------------------------#
-    #   hm          b, 128, 128, num_classes 
-    #   wh          b, 128, 128, 2 
-    #   reg         b, 128, 128, 2 
+    #   cls_pred          b, 128, 128, num_classes
+    #   loc_pred          b, 128, 128, 4
+    #   reg         b, 128, 128, 2
     #   scores      b, max_objects
     #   indices     b, max_objects
     #   class_ids   b, max_objects
     #   xs          b, max_objects
     #   ys          b, max_objects
     #-----------------------------------------------------#
-    scores, indices, class_ids, xs, ys = topk(hm, max_objects=max_objects)
-    b = tf.shape(hm)[0]
+    scores, indices, class_ids, xs, ys = topk(cls_pred, max_objects=max_objects)
+    b = tf.shape(cls_pred)[0]
     
     #-----------------------------------------------------#
-    #   wh          b, 128 * 128, 2
-    #   reg         b, 128 * 128, 2
+    #   loc_pred          b, 128 * 128, 4
     #-----------------------------------------------------#
-    reg = tf.reshape(reg, [b, -1, 2])
-    wh = tf.reshape(wh, [b, -1, 2])
-    length = tf.shape(wh)[1]
+    loc_pred = tf.reshape(loc_pred, [b, -1, 4])
+    length = tf.shape(loc_pred)[1]
 
     #-----------------------------------------------------#
     #   找到其在1维上的索引
@@ -149,8 +147,8 @@ def centernet(input_shape, num_classes, backbone='resnet50', max_objects=100, mo
         y1, y2 = centernet_head(C5, num_classes)
 
         if mode=="train":
-            loss_ = Lambda(loss, name='centernet_loss')([y1, y2, cls_input, loc_input, reg_mask_input, index_input])
-            loss_sum_ = Lambda(loss_sum, name='centernet_loss_sum')([loss_, cls_input])
+            loss_ = Lambda(loss, name='centernet_loss')([y1, y2, cls_input, loc_input, reg_mask_input])
+            loss_sum_ = Lambda(loss_sum, name='centernet_loss_sum')([loss_, reg_mask_input])
             model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input, index_input], outputs=[loss_sum_])
             return model
         else:

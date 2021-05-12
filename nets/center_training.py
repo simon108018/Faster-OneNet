@@ -4,6 +4,7 @@ from random import shuffle
 import cv2
 import numpy as np
 import tensorflow as tf
+import tensorflow_addons as tfa
 import tensorflow.keras.backend as K
 from matplotlib.colors import hsv_to_rgb, rgb_to_hsv
 from PIL import Image
@@ -45,7 +46,10 @@ def preprocess_image(image):
 #     return cls_loss
 
 def focal_loss(cls_pred, cls_true):
-    #   cls_true：類別真實值          (batch_size, max_bojects, num_classes)
+    #   cls_true：類別真實值          (batch_size, max_objects, num_classes)
+    #   cls_pred：類別預測值          (batch_size, 128, 128, num_classes)
+    #   將兩個值expand_dims到         (batch_size, max_objects, 128, 128, num_classes)
+
     #-------------------------------------------------------------------------#
     #   找到每张图片的正样本和负样本
     #   一个真实框对应一个正样本
@@ -53,20 +57,25 @@ def focal_loss(cls_pred, cls_true):
     #-------------------------------------------------------------------------#
     alpha = 0.25
     gamma = 2.0
+    m = tf.shape(cls_true)[1]
+    x, y = tf.shape(cls_pred)[1], tf.shape(cls_pred)[2]
+    cls_true = tf.expand_dims(tf.expand_dims(cls_true, 2), 2)
+    cls_true = tf.tile(cls_true, (1, 1, x, y, 1))
+    # (batch_size, max_objects, 128, 128, num_classes)
+    pos_mask = tf.cast(tf.equal(cls_true, 1), tf.float32)
+    neg_mask = tf.cast(tf.less(cls_true, 1), tf.float32)
 
-    cls_true = tf.cast(cls_true, tf.float32)
-    # num_pos = tf.reduce_sum(tgt_ids)
-    tgt_ids = tf.where(cls_true==1)[:,1]
+    cls_pred = tf.expand_dims(cls_pred, 1)
+    cls_pred = tf.tile(cls_pred, (1, m, 1, 1, 1))
 
-    #-------------------------------------------------------------------------#
-    #   计算focal loss。难分类样本权重大，易分类样本权重小。
-    #-------------------------------------------------------------------------#
-    pos_loss = -alpha * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * tf.pow(1 - cls_pred, gamma)
-    neg_loss = -(1 - alpha) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * tf.pow(cls_pred, gamma)
-    pos_loss = tf.gather(pos_loss, axis=-1, indices=tgt_ids)
-    neg_loss = tf.gather(neg_loss, axis=-1, indices=tgt_ids)
+    # (batch_size, max_objects, 128, 128, num_classes)
+    pos_loss = -alpha * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * tf.pow(1 - cls_pred, gamma) * pos_mask
+    neg_loss = -(1 - alpha) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * tf.pow(cls_pred, gamma) * neg_mask
     cls_loss = pos_loss + neg_loss
-    # tf.print(cls_loss)
+
+    # (batch_size, max_objects, 128, 128)
+    cls_loss = tf.reduce_sum(cls_loss, axis=-1)
+
 
     # #-------------------------------------------------------------------------#
     # #   进行损失的归一化
@@ -107,34 +116,41 @@ def focal_loss(cls_pred, cls_true):
 #     reg_loss = total_loss / (tf.reduce_sum(mask) + 1e-4)
 #     return reg_loss
 
-def reg_l1_loss(y_pred, y_true, mask):
+def reg_l1_loss(y_pred, y_true):
+    #   y_pred：位置預測值          (batch_size, 128, 128, 4)
+    #   y_true：位置真實值          (batch_size, max_objects, 4)
     #-------------------------------------------------------------------------#
-    #   获得batch_size和num_classes
+    #   將兩個值expand_dims到         (batch_size, max_objects, 128, 128, num_classes)
     #-------------------------------------------------------------------------#
-    b, c = tf.shape(y_pred)[0], tf.shape(y_pred)[-1]
     h, w = tf.shape(y_pred)[1], tf.shape(y_pred)[2]
+    m = tf.shape(y_true)[1]
 
-    #-------------------------------------------------------------------------#
-    #   利用序号取出预测结果中，和真实框相同的特征点的部分
-    #-------------------------------------------------------------------------#
-    batch
+    # batch
+    y_pred = tf.expand_dims(y_pred, 1)
+    y_pred = tf.tile(y_pred, (1, m, 1, 1, 1))
+    y_true = tf.expand_dims(tf.expand_dims(y_true, 2), 2)
+    y_true = tf.tile(y_true, (1, 1, h, w, 1))
+    reg_loss = tf.reduce_sum(tf.abs(y_true - y_pred), axis=-1)
 
-
-    batch_idx = tf.expand_dims(tf.range(0, b), 1)
-    batch_idx = tf.tile(batch_idx, (1, k))
-    full_indices = (tf.reshape(batch_idx, [-1]) * tf.cast(length, tf.int32) +
-                    tf.reshape(indices, [-1]))
-
-    y_pred = tf.gather(tf.reshape(y_pred, [-1,c]),full_indices)
-    y_pred = tf.reshape(y_pred, [b, -1, c])
-
-    mask = tf.tile(tf.expand_dims(mask, axis=-1), (1, 1, 2))
-    #-------------------------------------------------------------------------#
-    #   求取l1损失值
-    #-------------------------------------------------------------------------#
-    total_loss = tf.reduce_sum(tf.abs(y_true * mask - y_pred * mask))
-    reg_loss = total_loss / (tf.reduce_sum(mask) + 1e-4)
     return reg_loss
+
+def GIOU(y_pred, y_true):
+    #   y_pred：位置預測值          (batch_size, 128, 128, 4)
+    #   y_true：位置真實值          (batch_size, max_objects, 4)
+    #-------------------------------------------------------------------------#
+    #   將兩個值expand_dims到         (batch_size, max_objects, 128, 128, num_classes)
+    #-------------------------------------------------------------------------#
+    h, w = tf.shape(y_pred)[1], tf.shape(y_pred)[2]
+    m = tf.shape(y_true)[1]
+
+    # batch
+    y_pred = tf.expand_dims(y_pred, 1)
+    y_pred = tf.tile(y_pred, (1, m, 1, 1, 1))
+    y_true = tf.expand_dims(tf.expand_dims(y_true, 2), 2)
+    y_true = tf.tile(y_true, (1, 1, h, w, 1))
+    giou_loss = tfa.losses.giou_loss(y_pred, y_true)
+
+    return giou_loss
 
 def loss(args):
     #-----------------------------------------------------------------------------------------------------------------#
@@ -147,7 +163,7 @@ def loss(args):
     #   cls_true：類別真實值          (batch_size, max_bojects, num_classes)
     # #   wh_true：宽高的真实值         (batch_size, max_objects, 2)
     # #   reg_true：中心坐标偏移真实值  (batch_size, max_objects, 2)
-    #   loc_true：位置真實值          (batch_size, max_bojects, 4)
+    #   loc_true：位置真實值          (batch_size, max_objects, 4)
     #   reg_mask：真实值的mask        (batch_size, max_objects)
     #   indices：真实值对应的坐标     (batch_size, max_objects)
     #-----------------------------------------------------------------------------------------------------------------#
@@ -157,21 +173,28 @@ def loss(args):
     # reg_loss = reg_l1_loss(reg_pred, reg_true, indices, reg_mask)
     # total_loss = hm_loss + wh_loss + reg_loss
 
-    cls_pred, loc_pred, cls_true, loc_true, reg_mask, indices = args
-
+    cls_pred, loc_pred, cls_true, loc_true, reg_mask = args
     cls_loss = focal_loss(cls_pred, cls_true)
-    total_loss = cls_loss
-    # wh_loss = 0.1 * reg_l1_loss(loc_pred, loc_true, indices, reg_mask)
-    # reg_loss = reg_l1_loss(reg_pred, reg_true, indices, reg_mask)
-    # total_loss = cls_loss + wh_loss + reg_loss
+    loc_loss = reg_l1_loss(loc_pred, loc_true)
+    giou_loss = GIOU(loc_pred, loc_true)
+    total_loss = 2. * cls_loss + 5. * loc_loss + 2. * giou_loss
 
-    # total_loss = tf.Print(total_loss,[hm_loss,wh_loss,reg_loss])
     return total_loss
 
+
 def loss_sum(args):
-    loss, cls_true = args
-    tf.print(tf.reduce_sum(cls_true))
-    return tf.reduce_sum(loss)/tf.cast(tf.reduce_sum(cls_true),tf.float32)
+    loss, reg_mask = args
+    num_pos = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
+    b, k = tf.shape(loss)[0], tf.shape(loss)[1]
+    loss = tf.reshape(loss, (b, k, -1))
+    min_loss = tf.reduce_min(loss, axis=-1)
+    min_loss = tf.multiply(min_loss, reg_mask)
+    total_loss = tf.reduce_sum(min_loss)
+    total_loss = total_loss/tf.cast(num_pos, tf.float32)
+    total_loss = tf.where(tf.greater(num_pos, 0), total_loss, 0)
+    return total_loss
+
+
 
 def rand(a=0, b=1):
     return np.random.rand()*(b-a) + a
@@ -410,51 +433,51 @@ if __name__=="__main__":
     for data in gen.generate(True):
         break
 
-    y_true = np.array([[[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],
-                       [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [0, 0, 0, 0], [0, 0, 0, 0]],
-                       [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],
-                       [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], dtype='float32')
-    mask = np.array([[1, 1, 0, 0, 0],[1, 1, 1, 0, 0],[1, 1, 0, 0, 0],[1, 1, 0, 0, 0]], dtype='float32')
-    y_pred = np.array([[[[3, 6.5, 8, 12.7],[13, 16.5, 28, 32.7],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100]],
-                       [[3, 6.5, 8, 12.7],[13, 16.5, 28, 32.7],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100]],
-                       [[3, 6.5, 8, 12.7],[13, 16.5, 28, 32.7],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100]],
-                       [[3, 6.5, 8, 12.7],[13, 16.5, 28, 32.7],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100]],
-                       [[3, 6.5, 8, 12.7],[13, 16.5, 28, 32.7],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100]],
-                       [[3, 6.5, 8, 12.7],[13, 16.5, 28, 32.7],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100],[2, 90, 70, 100]]],
-                       [[[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]]],
-                       [[[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]]],
-                       [[[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]],
-                        [[3, 6.5, 8, 12.7], [13, 16.5, 28, 32.7], [2, 90, 70, 100], [2, 90, 70, 100], [2, 90, 70, 100],
-                         [2, 90, 70, 100]]]]
-                      )
+
+    b = 4
+    n = 100
+    c = 20
+    s = 128
+    cls_pred = tf.Variable(tf.zeros((b, 128, 128, c)),dtype=tf.float32, name='cls_pred')
+    cls_true = tf.Variable(tf.zeros((b, n, c)), dtype=tf.float32, name='cls_true')
+    loc_pred = tf.Variable(tf.zeros((b, 128, 128, 4)),dtype=tf.float32, name='loc_pred')
+    loc_true = tf.Variable(tf.zeros((b, n, 4)), dtype=tf.float32, name='loc_true')
+    mask = tf.Variable(tf.zeros((b, n)), dtype=tf.float32, name='mask')
+    for k in range(b):
+        i_max = tf.random.uniform(shape=[], maxval=100, dtype=tf.int32)
+        for i in range(i_max):
+            x1 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
+            x2 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
+            y1 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
+            y2 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+            loc_true[k, i, 0].assign(x1)
+            loc_true[k, i, 1].assign(y1)
+            loc_true[k, i, 2].assign(x2)
+            loc_true[k, i, 3].assign(y2)
+            j1 = tf.random.uniform(shape=[], maxval=c, dtype=tf.int32)
+            mask[k, i].assign(1)
+            cls_true[k, i, j1].assign(1)
+
+    for k in range(b):
+        for s1 in range(128):
+            for s2 in range(128):
+                x1 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
+                x2 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
+                y1 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
+                y2 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
+                x1, x2 = min(x1, x2), max(x1, x2)
+                y1, y2 = min(y1, y2), max(y1, y2)
+                loc_pred[k, s1, s2, 0].assign(x1)
+                loc_pred[k, s1, s2, 1].assign(y1)
+                loc_pred[k, s1, s2, 2].assign(x2)
+                loc_pred[k, s1, s2, 3].assign(y2)
+                j1 = tf.random.uniform(shape=[], maxval=c, dtype=tf.int32)
+                j2 = tf.random.uniform(shape=[], maxval=c, dtype=tf.int32)
+                cls_pred[k, s1, s2, j1].assign(1)
+                if j2!=j1:
+                    cls_pred[k, s1, s2, j1].assign(0.7)
+                    cls_pred[k, s1, s2, j2].assign(0.3)
+    cls_loss = focal_loss(cls_pred, cls_true)
+    reg_loss = reg_l1_loss(loc_pred, loc_true)
