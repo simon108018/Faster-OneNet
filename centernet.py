@@ -27,7 +27,8 @@ def preprocess_image(image):
 #--------------------------------------------#
 class CenterNet(object):
     _defaults = {
-        "model_path"        : 'model_data/centernet_resnet50_voc.h5',
+        # "model_path"        : 'model_data/centernet_resnet50_voc.h5',
+        "model_path": 'model_data/myweight.h5',
         "classes_path"      : 'model_data/voc_classes.txt',
         # "model_path"        : 'model_data/centernet_hourglass_coco.h5',
         # "classes_path"      : 'model_data/coco_classes.txt',

@@ -42,7 +42,7 @@ class mAP_CenterNet(CenterNet):
     #   检测图片
     #---------------------------------------------------#
     def detect_image(self,image_id,image):
-        f = open("./input/detection-results/"+image_id+".txt","w") 
+        f = open("./input/detection-results/"+image_id+".txt","w")
         self.confidence = 0.01
         self.nms_threhold = 0.5
         image_shape = np.array(np.shape(image)[0:2])
@@ -101,12 +101,11 @@ class mAP_CenterNet(CenterNet):
 
             top, left, bottom, right = boxes[i]
             f.write("%s %s %s %s %s %s\n" % (predicted_class, score[:6], str(int(left)), str(int(top)), str(int(right)),str(int(bottom))))
-
         f.close()
         return 
 
 centernet = mAP_CenterNet()
-image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/test.txt').read().strip().split()
+image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/train.txt').read().strip().split()
 
 if not os.path.exists("./input"):
     os.makedirs("./input")
@@ -114,11 +113,11 @@ if not os.path.exists("./input/detection-results"):
     os.makedirs("./input/detection-results")
 if not os.path.exists("./input/images-optional"):
     os.makedirs("./input/images-optional")
-
+print(image_ids)
 for image_id in tqdm(image_ids):
     image_path = "./VOCdevkit/VOC2007/JPEGImages/"+image_id+".jpg"
     image = Image.open(image_path)
-    # image.save("./input/images-optional/"+image_id+".jpg")
+    image.save("./input/images-optional/"+image_id+".jpg")
     centernet.detect_image(image_id,image)
     
 print("Conversion completed!")

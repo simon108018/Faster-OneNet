@@ -59,7 +59,8 @@ if __name__ == "__main__":
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
     # model_path = r"model_data/centernet_resnet50_voc.h5"
-    # model.load_weights(model_path,by_name=True,skip_mismatch=True)
+    model_path = r"model_data/myweight.h5"
+    model.load_weights(model_path,by_name=True,skip_mismatch=True)
 
     #----------------------------------------------------#
     #   获得图片路径和标签
@@ -97,45 +98,45 @@ if __name__ == "__main__":
     else:
         raise ValueError('Unsupported backbone - `{}`, Use resnet50.'.format(backbone))
 
-    for i in range(freeze_layer):
-        model.layers[i].trainable = False
-
-    #------------------------------------------------------#
-    #   主干特征提取网络特征通用，冻结训练可以加快训练速度
-    #   也可以在训练初期防止权值被破坏。
-    #   Init_Epoch为起始世代
-    #   Freeze_Epoch为冻结训练的世代
-    #   Epoch总训练世代
-    #   提示OOM或者显存不足请调小Batch_size
-    #------------------------------------------------------#
-    if True:
-        Lr = 1e-3
-        Batch_size = 4
-        Init_Epoch = 0
-        Freeze_Epoch = 50
-
-        gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
-
-        model.compile(
-            loss={'centernet_loss_sum': lambda y_true, y_pred: y_pred},
-            optimizer=keras.optimizers.Adam(Lr)
-        )
-
-        model.fit(gen.generate(True), 
-                steps_per_epoch=num_train//Batch_size,
-                validation_data=gen.generate(False),
-                validation_steps=num_val//Batch_size,
-                epochs=Freeze_Epoch, 
-                verbose=1,
-                initial_epoch=Init_Epoch,
-                callbacks=[logging, checkpoint, reduce_lr, early_stopping])
+    # for i in range(freeze_layer):
+    #     model.layers[i].trainable = False
+    #
+    # #------------------------------------------------------#
+    # #   主干特征提取网络特征通用，冻结训练可以加快训练速度
+    # #   也可以在训练初期防止权值被破坏。
+    # #   Init_Epoch为起始世代
+    # #   Freeze_Epoch为冻结训练的世代
+    # #   Epoch总训练世代
+    # #   提示OOM或者显存不足请调小Batch_size
+    # #------------------------------------------------------#
+    # if True:
+    #     Lr = 1e-3
+    #     Batch_size = 4
+    #     Init_Epoch = 0
+    #     Freeze_Epoch = 50
+    #
+    #     gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
+    #
+    #     model.compile(
+    #         loss={'centernet_loss_sum': lambda y_true, y_pred: y_pred},
+    #         optimizer=keras.optimizers.Adam(Lr)
+    #     )
+    #
+    #     model.fit(gen.generate(True),
+    #             steps_per_epoch=num_train//Batch_size,
+    #             validation_data=gen.generate(False),
+    #             validation_steps=num_val//Batch_size,
+    #             epochs=Freeze_Epoch,
+    #             verbose=1,
+    #             initial_epoch=Init_Epoch,
+    #             callbacks=[logging, checkpoint, reduce_lr, early_stopping])
 
     for i in range(freeze_layer):
         model.layers[i].trainable = True
 
     if True:
         Lr = 1e-4
-        Batch_size = 4
+        Batch_size = 3
         Freeze_Epoch = 50
         Epoch = 100
         
