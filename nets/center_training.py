@@ -17,6 +17,34 @@ def preprocess_image(image):
     return ((np.float32(image) / 255.) - mean) / std
 
 
+# def focal_loss(cls_pred, cls_true):
+#     #   cls_true：類別真實值          (batch_size, max_objects, num_classes)
+#     #   cls_pred：類別預測值          (batch_size, 128, 128, num_classes)
+#     #   將兩個值expand_dims到         (batch_size, 128, 128, max_objects, num_classes)
+#
+#     alpha = 0.75
+#     gamma = 2.0
+#     max_objects = tf.shape(cls_true)[1]
+#     x, y = tf.shape(cls_pred)[1], tf.shape(cls_pred)[2]
+#     cls_true = tf.expand_dims(tf.expand_dims(cls_true, 1), 1)
+#     cls_true = tf.tile(cls_true, (1, x, y, 1, 1))
+#     # (batch_size, 128, 128, max_objects, num_classes)
+#     pos_mask = tf.cast(tf.equal(cls_true, 1), tf.float32)
+#     neg_mask = tf.cast(tf.less(cls_true, 1), tf.float32)
+#
+#     cls_pred = tf.expand_dims(cls_pred, -2)
+#     cls_pred = tf.tile(cls_pred, (1, 1, 1, max_objects, 1))
+#
+#     # (batch_size, max_objects, 128, 128, num_classes)
+#     pos_loss = -alpha * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * tf.pow(1 - cls_pred, gamma) * pos_mask
+#     neg_loss = -(1 - alpha) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * tf.pow(cls_pred, gamma) * neg_mask
+#     cls_loss = pos_loss + neg_loss
+#
+#     # (batch_size, 128, 128, max_objects)
+#     cls_loss = tf.reduce_sum(cls_loss, axis=-1)
+#
+#     return cls_loss
+
 def focal_loss(cls_pred, cls_true):
     #   cls_true：類別真實值          (batch_size, max_objects, num_classes)
     #   cls_pred：類別預測值          (batch_size, 128, 128, num_classes)
@@ -30,15 +58,15 @@ def focal_loss(cls_pred, cls_true):
     cls_true = tf.tile(cls_true, (1, x, y, 1, 1))
     # (batch_size, 128, 128, max_objects, num_classes)
     pos_mask = tf.cast(tf.equal(cls_true, 1), tf.float32)
-    neg_mask = tf.cast(tf.less(cls_true, 1), tf.float32)
+    # neg_mask = tf.cast(tf.less(cls_true, 1), tf.float32)
 
     cls_pred = tf.expand_dims(cls_pred, -2)
     cls_pred = tf.tile(cls_pred, (1, 1, 1, max_objects, 1))
 
     # (batch_size, max_objects, 128, 128, num_classes)
     pos_loss = -alpha * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * tf.pow(1 - cls_pred, gamma) * pos_mask
-    neg_loss = -(1 - alpha) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * tf.pow(cls_pred, gamma) * neg_mask
-    cls_loss = pos_loss + neg_loss
+    neg_loss = -(1 - alpha) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * tf.pow(cls_pred, gamma) * pos_mask
+    cls_loss = pos_loss - neg_loss
 
     # (batch_size, 128, 128, max_objects)
     cls_loss = tf.reduce_sum(cls_loss, axis=-1)
@@ -84,7 +112,43 @@ def GIOU(y_pred, y_true):
 
     return giou_loss
 
-def loss(args):
+# def loss(args):
+#     #-----------------------------------------------------------------------------------------------------------------#
+#     #   cls_pred：類別預測值          (batch_size, 128, 128, num_classes)
+#     #   loc_pred：位置預測值          (batch_size, 128, 128, 4)
+#     #   cls_true：類別真實值          (batch_size, max_objects, num_classes)
+#     #   loc_true：位置真實值          (batch_size, max_objects, 4)
+#     #   reg_mask：真实值的mask        (batch_size, max_objects)
+#     #   indices：真实值对应的坐标     (batch_size, max_objects) 回傳值 [0, 128*128)
+#     #   total_loss：每個對應位置的loss (batch_size, 128, 128, max_objects)
+#     #-----------------------------------------------------------------------------------------------------------------#
+#     cls_pred, loc_pred, cls_true, loc_true, reg_mask, indices = args
+#
+#     cls_loss = focal_loss(cls_pred, cls_true)
+#     loc_loss = reg_l1_loss(loc_pred, loc_true)
+#     giou_loss = GIOU(loc_pred, loc_true)
+#     total_loss = 2. * cls_loss + 5. * loc_loss + 2. * giou_loss
+#
+#     ct_x, ct_y = tf.cast(indices, tf.float32) % tf.cast(tf.shape(total_loss)[1], tf.float32), tf.cast(indices, tf.float32) // tf.cast(tf.shape(total_loss)[1], tf.float32)
+#     ct_x, ct_y = tf.reshape(ct_x, [-1]) ,tf.reshape(ct_y, [-1])
+#
+#     b, max_objects = tf.shape(total_loss)[0], tf.shape(total_loss)[-1]
+#     batch_idx = tf.expand_dims(tf.range(0, b), 1)
+#     batch_idx = tf.tile(batch_idx, (1, max_objects))
+#     batch_idx = tf.cast(tf.reshape(batch_idx, [-1]), tf.float32)
+#     object_idx = tf.expand_dims(tf.range(0, b), 0)
+#     object_idx = tf.tile(object_idx, (max_objects, 1))
+#     object_idx = tf.cast(tf.reshape(object_idx, [-1]), tf.float32)
+#
+#     a = tf.cast(tf.transpose(tf.concat([[batch_idx, ct_x, ct_y, object_idx]], axis = 0)), tf.int32)
+#     total_loss = tf.gather_nd(total_loss, a)
+#     reg_mask = tf.reshape(reg_mask,[-1])
+#     num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
+#     mean_loss = tf.reduce_sum(total_loss * reg_mask)/num_box
+#
+#     return mean_loss
+
+def loss(args): # minicost
     #-----------------------------------------------------------------------------------------------------------------#
     #   cls_pred：類別預測值          (batch_size, 128, 128, num_classes)
     #   loc_pred：位置預測值          (batch_size, 128, 128, 4)
@@ -101,37 +165,13 @@ def loss(args):
     giou_loss = GIOU(loc_pred, loc_true)
     total_loss = 2. * cls_loss + 5. * loc_loss + 2. * giou_loss
 
-    ct_x, ct_y = tf.cast(indices, tf.float32) % tf.cast(tf.shape(total_loss)[1], tf.float32), tf.cast(indices, tf.float32) // tf.cast(tf.shape(total_loss)[1], tf.float32)
-    ct_x, ct_y = tf.reshape(ct_x, [-1]) ,tf.reshape(ct_y, [-1])
-
     b, max_objects = tf.shape(total_loss)[0], tf.shape(total_loss)[-1]
-    batch_idx = tf.expand_dims(tf.range(0, b), 1)
-    batch_idx = tf.tile(batch_idx, (1, max_objects))
-    batch_idx = tf.cast(tf.reshape(batch_idx, [-1]), tf.float32)
-    object_idx = tf.expand_dims(tf.range(0, b), 0)
-    object_idx = tf.tile(object_idx, (max_objects, 1))
-    object_idx = tf.cast(tf.reshape(object_idx, [-1]), tf.float32)
-
-    a = tf.cast(tf.transpose(tf.concat([[batch_idx, ct_x, ct_y, object_idx]], axis = 0)), tf.int32)
-    total_loss = tf.gather_nd(total_loss, a)
-    reg_mask = tf.reshape(reg_mask,[-1])
+    total_loss = tf.reshape(total_loss , (b, -1, max_objects))
+    min_loss = tf.reduce_min(total_loss, axis = 1)
     num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
-    mean_loss = tf.reduce_sum(total_loss * reg_mask)/num_box
+    mean_min_loss = tf.reduce_sum(min_loss * reg_mask) / num_box
 
-    return mean_loss
-
-
-# def loss_sum(args):
-#     loss, reg_mask = args
-#     num_pos = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
-#     b, k = tf.shape(loss)[0], tf.shape(loss)[1]
-#     loss = tf.reshape(loss, (b, k, -1))
-#     min_loss = tf.reduce_min(loss, axis=-1)
-#     min_loss = tf.multiply(min_loss, reg_mask)
-#     total_loss = tf.reduce_sum(min_loss)
-#     total_loss = total_loss/tf.cast(num_pos, tf.float32)
-#     total_loss = tf.where(tf.greater(num_pos, 0), total_loss, 0)
-#     return total_loss
+    return mean_min_loss
 
 
 
@@ -331,90 +371,3 @@ class Generator(object):
                     batch_reg_masks = np.zeros((self.batch_size, self.max_objects), dtype=np.float32)
                     batch_indices = np.zeros((self.batch_size, self.max_objects), dtype=np.float32)
 
-
-
-
-if __name__=="__main__":
-
-    gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-
-
-    def get_classes(classes_path):
-        '''loads the classes'''
-        with open(classes_path) as f:
-            class_names = f.readlines()
-        class_names = [c.strip() for c in class_names]
-        return class_names
-
-
-    input_shape = [512, 512, 3]
-    classes_path = '../model_data/voc_classes.txt'
-    class_names = get_classes(classes_path)
-    num_classes = len(class_names)
-    backbone = "resnet50"
-    annotation_path = '../2007_train.txt'
-    val_split = 0.1
-    with open(annotation_path) as f:
-        lines = f.readlines()
-    np.random.seed(10101)
-    np.random.shuffle(lines)
-    np.random.seed(None)
-    num_val = int(len(lines) * val_split)
-    num_train = len(lines) - num_val
-    Batch_size = 4
-    gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
-
-
-    for data in gen.generate(True):
-        break
-
-
-    b = 4
-    n = 100
-    c = 20
-    s = 128
-    cls_pred = tf.Variable(tf.zeros((b, 128, 128, c)),dtype=tf.float32, name='cls_pred')
-    cls_true = tf.Variable(tf.zeros((b, n, c)), dtype=tf.float32, name='cls_true')
-    loc_pred = tf.Variable(tf.zeros((b, 128, 128, 4)),dtype=tf.float32, name='loc_pred')
-    loc_true = tf.Variable(tf.zeros((b, n, 4)), dtype=tf.float32, name='loc_true')
-    mask = tf.Variable(tf.zeros((b, n)), dtype=tf.float32, name='mask')
-    for k in range(b):
-        i_max = tf.random.uniform(shape=[], maxval=100, dtype=tf.int32)
-        for i in range(i_max):
-            x1 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
-            x2 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
-            y1 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
-            y2 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
-            x1, x2 = min(x1, x2), max(x1, x2)
-            y1, y2 = min(y1, y2), max(y1, y2)
-            loc_true[k, i, 0].assign(x1)
-            loc_true[k, i, 1].assign(y1)
-            loc_true[k, i, 2].assign(x2)
-            loc_true[k, i, 3].assign(y2)
-            j1 = tf.random.uniform(shape=[], maxval=c, dtype=tf.int32)
-            mask[k, i].assign(1)
-            cls_true[k, i, j1].assign(1)
-
-    for k in range(b):
-        for s1 in range(128):
-            for s2 in range(128):
-                x1 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
-                x2 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
-                y1 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
-                y2 = tf.random.uniform(shape=[], maxval=s, dtype=tf.float32)
-                x1, x2 = min(x1, x2), max(x1, x2)
-                y1, y2 = min(y1, y2), max(y1, y2)
-                loc_pred[k, s1, s2, 0].assign(x1)
-                loc_pred[k, s1, s2, 1].assign(y1)
-                loc_pred[k, s1, s2, 2].assign(x2)
-                loc_pred[k, s1, s2, 3].assign(y2)
-                j1 = tf.random.uniform(shape=[], maxval=c, dtype=tf.int32)
-                j2 = tf.random.uniform(shape=[], maxval=c, dtype=tf.int32)
-                cls_pred[k, s1, s2, j1].assign(1)
-                if j2!=j1:
-                    cls_pred[k, s1, s2, j1].assign(0.7)
-                    cls_pred[k, s1, s2, j2].assign(0.3)
-    cls_loss = focal_loss(cls_pred, cls_true)
-    reg_loss = reg_l1_loss(loc_pred, loc_true)
