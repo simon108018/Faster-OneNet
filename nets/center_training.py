@@ -20,32 +20,27 @@ def preprocess_image(image):
 def focal_loss(cls_pred, cls_true):
     #   cls_true：類別真實值          (batch_size, max_objects, num_classes)
     #   cls_pred：類別預測值          (batch_size, 128, 128, num_classes)
-    #   將兩個值expand_dims到         (batch_size, max_objects, 128, 128, num_classes)
+    #   將兩個值expand_dims到         (batch_size, 128, 128, max_objects, num_classes)
 
-    #-------------------------------------------------------------------------#
-    #   找到每张图片的正样本和负样本
-    #   一个真实框对应一个正样本
-    #   除去正样本的特征点，其余为负样本
-    #-------------------------------------------------------------------------#
-    alpha = 0.25
+    alpha = 0.75
     gamma = 2.0
-    m = tf.shape(cls_true)[1]
+    max_objects = tf.shape(cls_true)[1]
     x, y = tf.shape(cls_pred)[1], tf.shape(cls_pred)[2]
-    cls_true = tf.expand_dims(tf.expand_dims(cls_true, 2), 2)
-    cls_true = tf.tile(cls_true, (1, 1, x, y, 1))
-    # (batch_size, max_objects, 128, 128, num_classes)
+    cls_true = tf.expand_dims(tf.expand_dims(cls_true, 1), 1)
+    cls_true = tf.tile(cls_true, (1, x, y, 1, 1))
+    # (batch_size, 128, 128, max_objects, num_classes)
     pos_mask = tf.cast(tf.equal(cls_true, 1), tf.float32)
     neg_mask = tf.cast(tf.less(cls_true, 1), tf.float32)
 
-    cls_pred = tf.expand_dims(cls_pred, 1)
-    cls_pred = tf.tile(cls_pred, (1, m, 1, 1, 1))
+    cls_pred = tf.expand_dims(cls_pred, -2)
+    cls_pred = tf.tile(cls_pred, (1, 1, 1, max_objects, 1))
 
     # (batch_size, max_objects, 128, 128, num_classes)
     pos_loss = -alpha * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * tf.pow(1 - cls_pred, gamma) * pos_mask
     neg_loss = -(1 - alpha) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * tf.pow(cls_pred, gamma) * neg_mask
     cls_loss = pos_loss + neg_loss
 
-    # (batch_size, max_objects, 128, 128)
+    # (batch_size, 128, 128, max_objects)
     cls_loss = tf.reduce_sum(cls_loss, axis=-1)
 
     return cls_loss
@@ -53,18 +48,19 @@ def focal_loss(cls_pred, cls_true):
 
 def reg_l1_loss(y_pred, y_true):
     #   y_pred：位置預測值          (batch_size, 128, 128, 4)
-    #   y_true：位置真實值          (batch_size, max_objects, 4)
+    #   y_true：位置真實值         (batch_size, max_objects, 4)
+    #
     #-------------------------------------------------------------------------#
-    #   將兩個值expand_dims到         (batch_size, max_objects, 128, 128, num_classes)
+    #   將兩個值expand_dims到         (batch_size, 128, 128, max_objects, num_classes)
     #-------------------------------------------------------------------------#
     h, w = tf.shape(y_pred)[1], tf.shape(y_pred)[2]
-    m = tf.shape(y_true)[1]
+    max_objects = tf.shape(y_true)[1]
 
     # batch
-    y_pred = tf.expand_dims(y_pred, 1)
-    y_pred = tf.tile(y_pred, (1, m, 1, 1, 1))
-    y_true = tf.expand_dims(tf.expand_dims(y_true, 2), 2)
-    y_true = tf.tile(y_true, (1, 1, h, w, 1))
+    y_pred = tf.expand_dims(y_pred, -2)
+    y_pred = tf.tile(y_pred, (1, 1, 1, max_objects, 1))
+    y_true = tf.expand_dims(tf.expand_dims(y_true, 1), 1)
+    y_true = tf.tile(y_true, (1, h, w, 1, 1))
     reg_loss = tf.reduce_sum(tf.abs(y_true - y_pred), axis=-1)
 
     return reg_loss
@@ -73,16 +69,17 @@ def GIOU(y_pred, y_true):
     #   y_pred：位置預測值          (batch_size, 128, 128, 4)
     #   y_true：位置真實值          (batch_size, max_objects, 4)
     #-------------------------------------------------------------------------#
-    #   將兩個值expand_dims到         (batch_size, max_objects, 128, 128, num_classes)
+    #   將兩個值expand_dims到         (batch_size, 128, 128, max_objects, num_classes)
     #-------------------------------------------------------------------------#
     h, w = tf.shape(y_pred)[1], tf.shape(y_pred)[2]
-    m = tf.shape(y_true)[1]
+    max_objects = tf.shape(y_true)[1]
 
     # batch
-    y_pred = tf.expand_dims(y_pred, 1)
-    y_pred = tf.tile(y_pred, (1, m, 1, 1, 1))
-    y_true = tf.expand_dims(tf.expand_dims(y_true, 2), 2)
-    y_true = tf.tile(y_true, (1, 1, h, w, 1))
+
+    y_pred = tf.expand_dims(y_pred, -2)
+    y_pred = tf.tile(y_pred, (1, 1, 1, max_objects, 1))
+    y_true = tf.expand_dims(tf.expand_dims(y_true, 1), 1)
+    y_true = tf.tile(y_true, (1, h, w, 1, 1))
     giou_loss = tfa.losses.giou_loss(y_pred, y_true)
 
     return giou_loss
@@ -91,31 +88,50 @@ def loss(args):
     #-----------------------------------------------------------------------------------------------------------------#
     #   cls_pred：類別預測值          (batch_size, 128, 128, num_classes)
     #   loc_pred：位置預測值          (batch_size, 128, 128, 4)
-    #   cls_true：類別真實值          (batch_size, max_bojects, num_classes)
+    #   cls_true：類別真實值          (batch_size, max_objects, num_classes)
     #   loc_true：位置真實值          (batch_size, max_objects, 4)
     #   reg_mask：真实值的mask        (batch_size, max_objects)
-    #   indices：真实值对应的坐标     (batch_size, max_objects)
+    #   indices：真实值对应的坐标     (batch_size, max_objects) 回傳值 [0, 128*128)
+    #   total_loss：每個對應位置的loss (batch_size, 128, 128, max_objects)
     #-----------------------------------------------------------------------------------------------------------------#
-    cls_pred, loc_pred, cls_true, loc_true, reg_mask = args
+    cls_pred, loc_pred, cls_true, loc_true, reg_mask, indices = args
+
     cls_loss = focal_loss(cls_pred, cls_true)
     loc_loss = reg_l1_loss(loc_pred, loc_true)
     giou_loss = GIOU(loc_pred, loc_true)
     total_loss = 2. * cls_loss + 5. * loc_loss + 2. * giou_loss
 
-    return total_loss
+    ct_x, ct_y = tf.cast(indices, tf.float32) % tf.cast(tf.shape(total_loss)[1], tf.float32), tf.cast(indices, tf.float32) // tf.cast(tf.shape(total_loss)[1], tf.float32)
+    ct_x, ct_y = tf.reshape(ct_x, [-1]) ,tf.reshape(ct_y, [-1])
+
+    b, max_objects = tf.shape(total_loss)[0], tf.shape(total_loss)[-1]
+    batch_idx = tf.expand_dims(tf.range(0, b), 1)
+    batch_idx = tf.tile(batch_idx, (1, max_objects))
+    batch_idx = tf.cast(tf.reshape(batch_idx, [-1]), tf.float32)
+    object_idx = tf.expand_dims(tf.range(0, b), 0)
+    object_idx = tf.tile(object_idx, (max_objects, 1))
+    object_idx = tf.cast(tf.reshape(object_idx, [-1]), tf.float32)
+
+    a = tf.cast(tf.transpose(tf.concat([[batch_idx, ct_x, ct_y, object_idx]], axis = 0)), tf.int32)
+    total_loss = tf.gather_nd(total_loss, a)
+    reg_mask = tf.reshape(reg_mask,[-1])
+    num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
+    mean_loss = tf.reduce_sum(total_loss * reg_mask)/num_box
+
+    return mean_loss
 
 
-def loss_sum(args):
-    loss, reg_mask = args
-    num_pos = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
-    b, k = tf.shape(loss)[0], tf.shape(loss)[1]
-    loss = tf.reshape(loss, (b, k, -1))
-    min_loss = tf.reduce_min(loss, axis=-1)
-    min_loss = tf.multiply(min_loss, reg_mask)
-    total_loss = tf.reduce_sum(min_loss)
-    total_loss = total_loss/tf.cast(num_pos, tf.float32)
-    total_loss = tf.where(tf.greater(num_pos, 0), total_loss, 0)
-    return total_loss
+# def loss_sum(args):
+#     loss, reg_mask = args
+#     num_pos = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
+#     b, k = tf.shape(loss)[0], tf.shape(loss)[1]
+#     loss = tf.reshape(loss, (b, k, -1))
+#     min_loss = tf.reduce_min(loss, axis=-1)
+#     min_loss = tf.multiply(min_loss, reg_mask)
+#     total_loss = tf.reduce_sum(min_loss)
+#     total_loss = total_loss/tf.cast(num_pos, tf.float32)
+#     total_loss = tf.where(tf.greater(num_pos, 0), total_loss, 0)
+#     return total_loss
 
 
 
@@ -181,7 +197,7 @@ class Generator(object):
         else:
             nw = int(scale*w)
             nh = int(nw/new_ar)
-        image = image.resize((nw,nh), Image.BICUBIC)
+        image = image.resize((nw, nh), Image.BICUBIC)
 
         # place image
         dx = int(rand(0, w-nw))
@@ -276,17 +292,15 @@ class Generator(object):
                         ct = np.array([(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
                         ct_int = ct.astype(np.int32)
 
-                        # # 获得热力图
-                        # radius = gaussian_radius((math.ceil(h), math.ceil(w)))
-                        # radius = max(0, int(radius))
-                        # batch_hms[b, :, :, cls_id] = draw_gaussian(batch_hms[b, :, :, cls_id], ct_int, radius)
+
                         # 獲得類別
                         batch_cls[b, i, cls_id] = 1.
                         # # 計算真實框的寬高
                         # batch_whs[b, i] = 1. * w, 1. * h
                         # # 计算中心偏移量
                         # batch_regs[b, i] = ct - ct_int
-                        # 計算box位置
+                        # 計算box 4個位置與中心點(ct_int)的相對位置
+                        # batch_loc[b, i] = bbox - np.array([ct_int[0], ct_int[1], ct_int[0], ct_int[1]], dtype=np.float32)
                         batch_loc[b, i] = bbox
                         # 将对应的mask设置为1，用于排除多余的0
                         batch_reg_masks[b, i] = 1

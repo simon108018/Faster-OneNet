@@ -6,8 +6,7 @@ from tensorflow.keras.layers import (Activation, BatchNormalization, Conv2D,
 from tensorflow.keras.models import Model
 from tensorflow.keras.regularizers import l2
 
-from nets.center_training import loss, loss_sum
-from nets.hourglass import HourglassNetwork
+from nets.center_training import loss
 from nets.resnet import ResNet50, centernet_head
 
 
@@ -25,23 +24,27 @@ def topk(cls_pred, max_objects=100):
     #   找出一定区域内，得分最大的特征点。
     #-------------------------------------------------------------------------#
     # hm = nms(hm)
+    cls_pred = nms(cls_pred)
     b, h, w, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
     #-------------------------------------------#
     #   将所有结果平铺，获得(b, 128 * 128 * 20)
     #-------------------------------------------#
     cls_pred = tf.reshape(cls_pred, (b, -1))
     #-----------------------------#
-    #   (b, k), (b, k)
+    #   scores.shape = (b, k), indices.shape = (b, k)
     #-----------------------------#
     scores, indices = tf.math.top_k(cls_pred, k=max_objects, sorted=True)
 
     #--------------------------------------#
     #   计算求出种类、网格点以及索引。
     #--------------------------------------#
+    #   這裡的 indices 包含了種類，值的range 在[0, 128 * 128 * 20)
     class_ids = indices % c
     xs = indices // c % w
     ys = indices // c // w
+    #   這裡的 indices 已不包含種類，只計算位置，值的range 在[0, 128 * 128)
     indices = ys * w + xs
+    tf.print(indices)
     return scores, indices, class_ids, xs, ys
 
 def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
@@ -67,15 +70,17 @@ def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
     #-----------------------------------------------------#
     #   找到其在1维上的索引
     #   batch_idx   b, max_objects
+    #   length = 128*128
     #-----------------------------------------------------#
     batch_idx = tf.expand_dims(tf.range(0, b), 1)
     batch_idx = tf.tile(batch_idx, (1, max_objects))
     full_indices = tf.reshape(batch_idx, [-1]) * tf.cast(length, tf.int32) + tf.reshape(indices, [-1])
-                    
+    print(full_indices)
+    tf.print(tf.shape(full_indices))
     #-----------------------------------------------------#
     #   取出top_k个框对应的参数
     #-----------------------------------------------------#
-    topk_loc = tf.gather(tf.reshape(loc_pred, [-1,4]), full_indices)
+    topk_loc = tf.gather(tf.reshape(loc_pred, [-1, 4]), full_indices)
     topk_loc = tf.reshape(topk_loc, [b, -1, 4])
 
     #-----------------------------------------------------#
@@ -145,9 +150,9 @@ def centernet(input_shape, num_classes, backbone='resnet50', max_objects=100, mo
         y1, y2 = centernet_head(C5, num_classes)
 
         if mode=="train":
-            loss_ = Lambda(loss, name='centernet_loss')([y1, y2, cls_input, loc_input, reg_mask_input])
-            loss_sum_ = Lambda(loss_sum, name='centernet_loss_sum')([loss_, reg_mask_input])
-            model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input, index_input], outputs=[loss_sum_])
+            loss_ = Lambda(loss, name='centernet_loss')([y1, y2, cls_input, loc_input, reg_mask_input, index_input])
+            # loss_sum_ = Lambda(loss_sum, name='centernet_loss_sum')([loss_, reg_mask_input])
+            model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input, index_input], outputs=[loss_])
             return model
         else:
             detections = Lambda(lambda x: decode(*x, max_objects=max_objects,

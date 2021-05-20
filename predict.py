@@ -26,6 +26,8 @@ while True:
         image = Image.open(img)
     except:
         print('Open Error! Try again!')
+        if img == 'n':
+            break
         continue
     else:
         r_image = centernet.detect_image(image)
