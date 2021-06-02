@@ -59,8 +59,7 @@ if __name__ == "__main__":
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
     model_path = r"model_data/centernet_resnet50_voc.h5"
-    # model_path = r"model_data/myweight.h5"
-    model.load_weights(model_path,by_name=True,skip_mismatch=True)
+    model.load_weights(model_path, by_name=True, skip_mismatch=True)
 
     #----------------------------------------------------#
     #   获得图片路径和标签
@@ -118,7 +117,8 @@ if __name__ == "__main__":
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
         model.compile(
-            loss={'centernet_loss': lambda y_true, y_pred: y_pred},
+            loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
+            loss_weights=[2, 5, 2],
             optimizer=keras.optimizers.Adam(Lr)
         )
 
@@ -143,7 +143,8 @@ if __name__ == "__main__":
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
         model.compile(
-            loss={'centernet_loss': lambda y_true, y_pred: y_pred},
+            loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
+            loss_weights=[2, 5, 2],
             optimizer=keras.optimizers.Adam(Lr)
         )
 

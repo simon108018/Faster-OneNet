@@ -6,7 +6,7 @@ from tensorflow.keras.layers import (Activation, BatchNormalization, Conv2D,
 from tensorflow.keras.models import Model
 from tensorflow.keras.regularizers import l2
 
-from nets.center_training import loss
+from nets.center_training import loss, cls, loc, giou
 from nets.resnet import ResNet50, centernet_head
 
 
@@ -150,9 +150,11 @@ def centernet(input_shape, num_classes, backbone='resnet50', max_objects=100, mo
         y1, y2 = centernet_head(C5, num_classes)
 
         if mode=="train":
-            loss_ = Lambda(loss, name='centernet_loss')([y1, y2, cls_input, loc_input, reg_mask_input, index_input])
-            # loss_sum_ = Lambda(loss_sum, name='centernet_loss_sum')([loss_, reg_mask_input])
-            model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input, index_input], outputs=[loss_])
+            l1, l2, l3 = Lambda(loss, name='loss')([y1, y2, cls_input, loc_input, reg_mask_input, index_input])
+            cls_loss_ = Lambda(cls, name='cls')([l1])
+            loc_loss_ = Lambda(loc, name='loc')([l2])
+            giou_loss_ = Lambda(giou, name='giou')([l3])
+            model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input, index_input], outputs=[cls_loss_, loc_loss_, giou_loss_])
             return model
         else:
             detections = Lambda(lambda x: decode(*x, max_objects=max_objects,

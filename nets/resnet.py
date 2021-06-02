@@ -7,11 +7,41 @@ import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.keras.layers import (Activation, AveragePooling2D,
                                      BatchNormalization, Conv2D,
-                                     Conv2DTranspose, Dense, Dropout, Flatten,
+                                     Conv2DTranspose, Dense, Dropout, Flatten, Lambda,
                                      Input, MaxPooling2D, ZeroPadding2D)
 from tensorflow.keras.models import Model
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.regularizers import l2
+
+def apply_ltrb(pred_ltrb):
+
+    '''
+    pred_ltrb 上的4個value分別是(x1, y1, x2, y2)表示以每個cell為中心，預測出來的框架左上角與右下角的相對距離
+    ltrb(left-up-right-bottom)
+    此函數將預測出來的相對位置換算成絕對位置
+
+    下面是一個框，在cell(cx,cy)取得相對距離(x1,y1,x2,y2)後，換算成絕對位置(cx-x1,cy-y1,cx+x2,cy+y2)
+    (cx-x1,cy-y1)
+      ----------------------------------
+      |          ↑                     |
+      |          |                     |
+      |          |y1                   |
+      |          |                     |
+      |←------(cx,cy)-----------------→|
+      |   x1     |          x2         |
+      |          |                     |
+      |          |                     |
+      |          |y2                   |
+      |          |                     |
+      |          |                     |
+      |          ↓                     |
+      ----------------------------------(cx+x2,cy+y2)
+    '''
+    b, w, h, c = tf.shape(pred_ltrb)[0], tf.shape(pred_ltrb)[1], tf.shape(pred_ltrb)[2], tf.shape(pred_ltrb)[3]
+    ct = tf.cast(tf.transpose(tf.meshgrid(tf.range(0, w), tf.range(0, h))), tf.float32)
+    # locations : w*h*2 這2個 value包含 cx=ct[0], cy=ct[1]
+    locations = tf.concat((ct - pred_ltrb[:, :, :, :2], ct + pred_ltrb[:, :, :, 2:]), axis=-1)
+    return locations
 
 
 def identity_block(input_tensor, kernel_size, filters, stage, block):
@@ -143,12 +173,14 @@ def centernet_head(x,num_classes):
     y1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(x)
     y1 = BatchNormalization()(y1)
     y1 = Activation('relu')(y1)
-    y1 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='softmax')(y1)
+    y1 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='sigmoid')(y1)
 
-    # loc header
+    # loc header (128*128*4)
     y2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(x)
     y2 = BatchNormalization()(y2)
     y2 = Activation('relu')(y2)
-    y2 = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y2)
+    y2 = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu')(y2)
+    y2 = Lambda(apply_ltrb, name='pred_location')(y2)
+
 
     return y1, y2
