@@ -23,7 +23,6 @@ def topk(cls_pred, max_objects=100):
     #   进行热力图的非极大抑制，利用3x3的卷积对热力图进行最大值筛选
     #   找出一定区域内，得分最大的特征点。
     #-------------------------------------------------------------------------#
-    # hm = nms(hm)
     cls_pred = nms(cls_pred)
     b, h, w, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
     #-------------------------------------------#
@@ -83,13 +82,6 @@ def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
     topk_loc = tf.gather(tf.reshape(loc_pred, [-1, 4]), full_indices)
     topk_loc = tf.reshape(topk_loc, [b, -1, 4])
 
-    #-----------------------------------------------------#
-    #   利用参数获得调整后预测框的中心
-    #   topk_cx     b,k,1
-    #   topk_cy     b,k,1
-    #-----------------------------------------------------#
-    # topk_cx = tf.cast(tf.expand_dims(xs, axis=-1), tf.float32) + topk_reg[..., 0:1]
-    # topk_cy = tf.cast(tf.expand_dims(ys, axis=-1), tf.float32) + topk_reg[..., 1:2]
 
     #-----------------------------------------------------#
     #   计算预测框左上角和右下角
@@ -98,8 +90,6 @@ def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
     #   topk_x2     b,k,1       预测框右下角x轴坐标
     #   topk_y2     b,k,1       预测框右下角y轴坐标
     #-----------------------------------------------------#
-    # topk_x1, topk_y1 = topk_cx - topk_wh[..., 0:1] / 2, topk_cy - topk_wh[..., 1:2] / 2
-    # topk_x2, topk_y2 = topk_cx + topk_wh[..., 0:1] / 2, topk_cy + topk_wh[..., 1:2] / 2
     topk_x1, topk_y1 = topk_loc[..., 0:1], topk_loc[..., 1:2]
     topk_x2, topk_y2 = topk_loc[..., 2:3], topk_loc[..., 3:4]
     #-----------------------------------------------------#

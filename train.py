@@ -58,7 +58,8 @@ if __name__ == "__main__":
     #   训练自己的数据集时提示维度不匹配正常
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
-    model_path = r"model_data/centernet_resnet50_voc.h5"
+    # model_path = r"model_data/centernet_resnet50_voc.h5"
+    model_path = r"model_data/myweight.h5"
     model.load_weights(model_path, by_name=True, skip_mismatch=True)
 
     #----------------------------------------------------#
@@ -111,8 +112,8 @@ if __name__ == "__main__":
     if True:
         Lr = 1e-3
         Batch_size = 3
-        Init_Epoch = 0
-        Freeze_Epoch = 50
+        Init_Epoch = 50
+        Freeze_Epoch = 70
 
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
@@ -137,7 +138,7 @@ if __name__ == "__main__":
     if True:
         Lr = 1e-4
         Batch_size = 3
-        Freeze_Epoch = 50
+        Freeze_Epoch = 70
         Epoch = 100
         
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)

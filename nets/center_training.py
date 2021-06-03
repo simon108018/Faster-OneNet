@@ -32,9 +32,10 @@ def focal_loss(cls_pred, cls_true, alpha = 0.25, gamma = 2.0):
     pos_mask = tf.cast(tf.equal(cls_true, 1), tf.float32)
 
     # (batch_size, max_objects, 128*128, num_classes)
-    neg_loss = -(1 - alpha) * tf.pow(cls_pred, gamma) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * pos_mask
+    # neg_loss = -(1 - alpha) * tf.pow(cls_pred, gamma) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * pos_mask
     pos_loss = -alpha * tf.pow(1 - cls_pred, gamma) * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * pos_mask
-    cls_loss = pos_loss + neg_loss
+    # cls_loss = pos_loss + neg_loss
+    cls_loss = pos_loss
 
     # (batch_size, max_objects, 128*128)
     # 用reduce_sum是因為最後一個維度上的值，只有一個值不為0，此值即為我們想計算的物種的focal loss
