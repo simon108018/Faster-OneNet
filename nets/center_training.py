@@ -29,18 +29,18 @@ def focal_loss(cls_pred, cls_true, alpha = 0.25, gamma = 2.0):
     cls_true = tf.expand_dims(cls_true, 2)
     cls_true = tf.tile(cls_true, (1, 1, w_x_h, 1))
     # (batch_size, max_objects, 128*128, num_classes)
-    pos_mask = tf.cast(tf.equal(cls_true, 1), tf.float32)
+    cls_true = tf.cast(tf.equal(cls_true, 1), tf.float32)
+    # 為了節省記憶體，neg_mask 使用1-pos_mask
+    # neg_mask = tf.cast(tf.equal(cls_true, 0), tf.float32)
 
     # (batch_size, max_objects, 128*128, num_classes)
-    # neg_loss = -(1 - alpha) * tf.pow(cls_pred, gamma) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * pos_mask
-    pos_loss = -alpha * tf.pow(1 - cls_pred, gamma) * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * pos_mask
-    # cls_loss = pos_loss + neg_loss
-    cls_loss = pos_loss
-
-    # (batch_size, max_objects, 128*128)
-    # 用reduce_sum是因為最後一個維度上的值，只有一個值不為0，此值即為我們想計算的物種的focal loss
-    # 而其餘的值因為皆為0，所以可以直接使用tf.reduce_sum計算降維度並計算focal loss
-    cls_loss = tf.reduce_sum(cls_loss, axis=-1)
+    # cls_loss = mean(pos_loss+neg_loss)
+    cls_loss = tf.reduce_sum(
+        (- alpha * tf.pow(1 - cls_pred, gamma) * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * cls_true \
+         -(1 - alpha) * tf.pow(cls_pred, gamma) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * (1.-cls_true)),
+        axis=-1
+    )
+    tfa.losses.sigmoid_focal_crossentropy(cls_true, cls_pred, from_logits=False)
 
     return cls_loss
 
@@ -149,7 +149,7 @@ def rand(a=0, b=1):
 class Generator(object):
     def __init__(self, batch_size, train_lines, val_lines,
                 input_size, num_classes, max_objects=100):
-        
+
         self.batch_size = batch_size
         self.train_lines = train_lines
         self.val_lines = val_lines
@@ -266,7 +266,7 @@ class Generator(object):
             else:
                 shuffle(self.val_lines)
                 lines = self.val_lines
-                
+
             batch_images = np.zeros((self.batch_size, self.input_size[0], self.input_size[1], self.input_size[2]), dtype=np.float32)
             # batch_hms = np.zeros((self.batch_size, self.output_size[0], self.output_size[1], self.num_classes), dtype=np.float32)
             batch_cls = np.zeros((self.batch_size, self.max_objects, self.num_classes), dtype=np.float32)
@@ -278,7 +278,7 @@ class Generator(object):
 
 
             b = 0
-            for annotation_line in lines:  
+            for annotation_line in lines:
                 img,y = self.get_random_data(annotation_line,self.input_size[0:2],random=train)
 
                 if len(y)!=0:
@@ -294,7 +294,7 @@ class Generator(object):
                     bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, self.output_size[1] - 1)
                     bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, self.output_size[0] - 1)
                     cls_id = int(y[i,-1])
-                    
+
                     h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
                     if h > 0 and w > 0:
                         ct = np.array([(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)

@@ -57,9 +57,11 @@ def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
     #   xs          b, max_objects
     #   ys          b, max_objects
     #-----------------------------------------------------#
+
     scores, indices, class_ids, xs, ys = topk(cls_pred, max_objects=max_objects)
     b = tf.shape(cls_pred)[0]
-    
+    tf.print('hi:',tf.reduce_sum(tf.cast(tf.greater(cls_pred,0.97), tf.float32)))
+    tf.print('hihi')
     #-----------------------------------------------------#
     #   loc_pred          b, 128 * 128, 4
     #-----------------------------------------------------#

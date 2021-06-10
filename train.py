@@ -29,7 +29,7 @@ if __name__ == "__main__":
     #-----------------------------#
     #   图片的大小
     #-----------------------------#
-    input_shape = [512,512,3]
+    input_shape = [512, 512, 3]
     #-----------------------------#
     #   训练前一定要注意修改
     #   classes_path对应的txt的内容
@@ -90,8 +90,8 @@ if __name__ == "__main__":
     logging = TensorBoard(log_dir="logs")
     checkpoint = ModelCheckpoint('logs/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
         monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=2, verbose=1)
-    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=6, verbose=1)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, verbose=1)
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=12, verbose=1)
 
     if backbone == "resnet50":
         freeze_layer = 171
@@ -111,9 +111,9 @@ if __name__ == "__main__":
     #------------------------------------------------------#
     if True:
         Lr = 1e-3
-        Batch_size = 3
-        Init_Epoch = 50
-        Freeze_Epoch = 70
+        Batch_size = 4
+        Init_Epoch = 0
+        Freeze_Epoch = 50
 
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
@@ -138,8 +138,8 @@ if __name__ == "__main__":
     if True:
         Lr = 1e-4
         Batch_size = 3
-        Freeze_Epoch = 70
-        Epoch = 100
+        Freeze_Epoch = 50
+        Epoch = 200
         
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 

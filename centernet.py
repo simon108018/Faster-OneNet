@@ -27,18 +27,19 @@ def preprocess_image(image):
 #--------------------------------------------#
 class CenterNet(object):
     _defaults = {
-        "model_path"        : 'model_data/centernet_resnet50_voc.h5',
+        # "model_path"        : 'model_data/centernet_resnet50_voc.h5',
+        "model_path"        : 'model_data/myweight.h5',
         "classes_path"      : 'model_data/voc_classes.txt',
         # "model_path"        : 'model_data/centernet_hourglass_coco.h5',
         # "classes_path"      : 'model_data/coco_classes.txt',
         "backbone"          : 'resnet50',
         "input_shape"       : [512,512,3],
-        "confidence"        : 0.3,
+        "confidence"        : 0.4,
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
         # 也可以根据检测效果自行选择
         "nms"               : True,
-        "nms_threhold"      : 0.3,
+        "nms_threhold"      : 0.2,
     }
 
     @classmethod
