@@ -19,7 +19,7 @@ def letterbox_image(image, size):
     new_image.paste(image, ((w-nw)//2, (h-nh)//2))
     return new_image
 
-def centernet_correct_boxes(top, left, bottom, right, input_shape, image_shape):
+def onenet_correct_boxes(top, left, bottom, right, input_shape, image_shape):
     new_shape = image_shape*np.min(input_shape/image_shape)
 
     offset = (input_shape-new_shape)/2./input_shape

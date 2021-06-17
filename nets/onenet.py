@@ -6,8 +6,9 @@ from tensorflow.keras.layers import (Activation, BatchNormalization, Conv2D,
 from tensorflow.keras.models import Model
 from tensorflow.keras.regularizers import l2
 
-from nets.center_training import loss, cls, loc, giou
-from nets.resnet import ResNet50, centernet_head
+from nets.onenet_loss import loss, cls, loc, giou
+from nets.resnet import ResNet50, onenet_head
+from nets.resnet18 import ResNet18
 
 
 def nms(heat, kernel=3):
@@ -43,7 +44,6 @@ def topk(cls_pred, max_objects=100):
     ys = indices // c // w
     #   這裡的 indices 已不包含種類，只計算位置，值的range 在[0, 128 * 128)
     indices = ys * w + xs
-    tf.print(indices)
     return scores, indices, class_ids, xs, ys
 
 def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
@@ -60,8 +60,7 @@ def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
 
     scores, indices, class_ids, xs, ys = topk(cls_pred, max_objects=max_objects)
     b = tf.shape(cls_pred)[0]
-    tf.print('hi:',tf.reduce_sum(tf.cast(tf.greater(cls_pred,0.97), tf.float32)))
-    tf.print('hihi')
+
     #-----------------------------------------------------#
     #   loc_pred          b, 128 * 128, 4
     #-----------------------------------------------------#
@@ -76,8 +75,6 @@ def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
     batch_idx = tf.expand_dims(tf.range(0, b), 1)
     batch_idx = tf.tile(batch_idx, (1, max_objects))
     full_indices = tf.reshape(batch_idx, [-1]) * tf.cast(length, tf.int32) + tf.reshape(indices, [-1])
-    print(full_indices)
-    tf.print(tf.shape(full_indices))
     #-----------------------------------------------------#
     #   取出top_k个框对应的参数
     #-----------------------------------------------------#
@@ -110,8 +107,8 @@ def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
     return detections
 
 
-def centernet(input_shape, num_classes, backbone='resnet50', max_objects=100, mode="train", num_stacks=2):
-    assert backbone in ['resnet50']
+def onenet(input_shape, num_classes, backbone='resnet50', max_objects=100, mode="train", prior_prob=0.01,num_stacks=2):
+    assert backbone in ['resnet18', 'resnet50']
     output_size = input_shape[0] // 4
     image_input = Input(shape=input_shape)
     cls_input = Input(shape=(max_objects, num_classes))
@@ -122,35 +119,41 @@ def centernet(input_shape, num_classes, backbone='resnet50', max_objects=100, mo
     reg_mask_input = Input(shape=(max_objects,))
     index_input = Input(shape=(max_objects,))
 
-    if backbone=='resnet50':
-        #-----------------------------------#
+    if backbone=='resnet18':
+        # -----------------------------------#
+        #   对输入图片进行特征提取
+        #   512, 512, 3 -> 16, 16, 512
+        # -----------------------------------#
+        C5 = ResNet18(image_input)
+    elif backbone=='resnet50':
+        # -----------------------------------#
         #   对输入图片进行特征提取
         #   512, 512, 3 -> 16, 16, 2048
-        #-----------------------------------#
+        # -----------------------------------#
         C5 = ResNet50(image_input)
-        #--------------------------------------------------------------------------------------------------------#
-        #   对获取到的特征进行上采样，进行分类预测和回归预测
-        #   16, 16, 2048 -> 32, 32, 256 -> 64, 64, 128 -> 128, 128, 64 -> 128, 128, 64 -> 128, 128, num_classes
-        #                                                              -> 128, 128, 64 -> 128, 128, 2
-        #                                                              -> 128, 128, 64 -> 128, 128, 2
-        #--------------------------------------------------------------------------------------------------------#
-        # y1, y2, y3 = centernet_head(C5,num_classes)
-        # if mode=="train":
-        #     loss_ = Lambda(loss, name='centernet_loss')([y1, y2, y3, hm_input, wh_input, reg_input, reg_mask_input, index_input])
-        #     model = Model(inputs=[image_input, hm_input, wh_input, reg_input, reg_mask_input, index_input], outputs=[loss_])
-        #     return model
-        y1, y2 = centernet_head(C5, num_classes)
+    else:
+        try:
+            raise EOFError
+        except:
+            print('EOFError')
 
-        if mode=="train":
-            l1, l2, l3 = Lambda(loss, name='loss')([y1, y2, cls_input, loc_input, reg_mask_input, index_input])
-            cls_loss_ = Lambda(cls, name='cls')([l1])
-            loc_loss_ = Lambda(loc, name='loc')([l2])
-            giou_loss_ = Lambda(giou, name='giou')([l3])
-            model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input, index_input], outputs=[cls_loss_, loc_loss_, giou_loss_])
-            return model
-        else:
-            detections = Lambda(lambda x: decode(*x, max_objects=max_objects,
-                                                num_classes=num_classes))([y1, y2])
-            prediction_model = Model(inputs=image_input, outputs=detections)
-            return prediction_model
+    #--------------------------------------------------------------------------------------------------------#
+    #   对获取到的特征进行上采样，进行分类预测和回归预测
+    #   16, 16, 1024 -> 32, 32, 256 -> 64, 64, 128 -> 128, 128, 64 -> 128, 128, 64 -> 128, 128, num_classes
+    #        or  512                                               -> 128, 128, 64 -> 128, 128, 2
+    #                                                              -> 128, 128, 64 -> 128, 128, 2
+    #--------------------------------------------------------------------------------------------------------#
+    y1, y2 = onenet_head(C5, num_classes, prior_prob)
+    if mode=="train":
+        l1, l2, l3 = Lambda(loss, name='loss')([y1, y2, cls_input, loc_input, reg_mask_input])
+        cls_loss_ = Lambda(cls, name='cls')([l1])
+        loc_loss_ = Lambda(loc, name='loc')([l2])
+        giou_loss_ = Lambda(giou, name='giou')([l3])
+        model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input], outputs=[cls_loss_, loc_loss_, giou_loss_])
+        return model
+    else:
+        detections = Lambda(lambda x: decode(*x, max_objects=max_objects,
+                                            num_classes=num_classes))([y1, y2])
+        prediction_model = Model(inputs=image_input, outputs=detections)
+        return prediction_model
 

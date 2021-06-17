@@ -11,9 +11,9 @@ from PIL import Image
 from tensorflow.keras.layers import Input
 from tqdm import tqdm
 
-from centernet import CenterNet
-from nets.centernet import centernet
-from utils.utils import centernet_correct_boxes, letterbox_image, nms
+from onenet import OneNet
+from nets.onenet import onenet
+from utils.utils import onenet_correct_boxes, letterbox_image, nms
 
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
@@ -31,7 +31,7 @@ def preprocess_image(image):
     std = [0.2886383, 0.27408165, 0.27809834]
     return ((np.float32(image) / 255.) - mean) / std
 
-class FPS_CenterNet(CenterNet):
+class FPS_OneNet(OneNet):
     def get_FPS(self, image, test_interval):
         image_shape = np.array(np.shape(image)[0:2])
         #---------------------------------------------------------#
@@ -39,7 +39,7 @@ class FPS_CenterNet(CenterNet):
         #---------------------------------------------------------#
         crop_img = letterbox_image(image, [self.input_shape[0],self.input_shape[1]])
         #----------------------------------------------------------------------------------#
-        #   将RGB转化成BGR，这是因为原始的centernet_hourglass权值是使用BGR通道的图片训练的
+        #   将RGB转化成BGR，这是因为原始的onenet_hourglass权值是使用BGR通道的图片训练的
         #----------------------------------------------------------------------------------#
         photo = np.array(crop_img,dtype = np.float32)[:,:,::-1]
         #-----------------------------------------------------------#
@@ -64,7 +64,7 @@ class FPS_CenterNet(CenterNet):
             top_label_indices = det_label[top_indices].tolist()
             top_xmin, top_ymin, top_xmax, top_ymax = np.expand_dims(det_xmin[top_indices],-1),np.expand_dims(det_ymin[top_indices],-1),np.expand_dims(det_xmax[top_indices],-1),np.expand_dims(det_ymax[top_indices],-1)
             
-            boxes = centernet_correct_boxes(top_ymin,top_xmin,top_ymax,top_xmax,np.array([self.input_shape[0],self.input_shape[1]]),image_shape)
+            boxes = onenet_correct_boxes(top_ymin,top_xmin,top_ymax,top_xmax,np.array([self.input_shape[0],self.input_shape[1]]),image_shape)
 
          
         t1 = time.time()
@@ -86,14 +86,14 @@ class FPS_CenterNet(CenterNet):
                 top_label_indices = det_label[top_indices].tolist()
                 top_xmin, top_ymin, top_xmax, top_ymax = np.expand_dims(det_xmin[top_indices],-1),np.expand_dims(det_ymin[top_indices],-1),np.expand_dims(det_xmax[top_indices],-1),np.expand_dims(det_ymax[top_indices],-1)
                 
-                boxes = centernet_correct_boxes(top_ymin,top_xmin,top_ymax,top_xmax,np.array([self.input_shape[0],self.input_shape[1]]),image_shape)
+                boxes = onenet_correct_boxes(top_ymin,top_xmin,top_ymax,top_xmax,np.array([self.input_shape[0],self.input_shape[1]]),image_shape)
 
         t2 = time.time()
         tact_time = (t2 - t1) / test_interval
         return tact_time
         
-centernet = FPS_CenterNet()
+onenet = FPS_OneNet()
 test_interval = 100
 img = Image.open('img/street.jpg')
-tact_time = centernet.get_FPS(img, test_interval)
+tact_time = onenet.get_FPS(img, test_interval)
 print(str(tact_time) + ' seconds, ' + str(1/tact_time) + 'FPS, @batch_size 1')

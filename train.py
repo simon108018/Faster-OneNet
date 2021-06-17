@@ -4,8 +4,8 @@ from tensorflow import keras
 from tensorflow.keras.callbacks import (EarlyStopping, ReduceLROnPlateau,
                                         TensorBoard)
 from utils.utils import ModelCheckpoint
-from nets.center_training import Generator
-from nets.centernet import centernet
+from nets.onenet_generator import Generator
+from nets.onenet import onenet
 
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
@@ -43,24 +43,26 @@ if __name__ == "__main__":
     num_classes = len(class_names)
     #-----------------------------#
     #   主干特征提取网络的选择
+    #   resnet18
     #   resnet50
     #   hourglass
     #-----------------------------#
     backbone = "resnet50"
 
     #----------------------------------------------------#
-    #   获取centernet模型
+    #   获取onenet模型
     #----------------------------------------------------#
-    model = centernet(input_shape, num_classes=num_classes, backbone=backbone, mode='train')
+    model = onenet(input_shape, num_classes=num_classes, backbone=backbone, mode='train')
     
     #------------------------------------------------------#
     #   权值文件请看README，百度网盘下载
     #   训练自己的数据集时提示维度不匹配正常
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
-    # model_path = r"model_data/centernet_resnet50_voc.h5"
-    model_path = r"model_data/myweight.h5"
-    model.load_weights(model_path, by_name=True, skip_mismatch=True)
+    if backbone == "resnet50":
+        # model_path = r"model_data/onenet_resnet50_voc.h5"
+        model_path = r"model_data/myweight2.h5"
+        model.load_weights(model_path, by_name=True, skip_mismatch=True)
 
     #----------------------------------------------------#
     #   获得图片路径和标签
@@ -90,16 +92,19 @@ if __name__ == "__main__":
     logging = TensorBoard(log_dir="logs")
     checkpoint = ModelCheckpoint('logs/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
         monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, verbose=1)
-    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=12, verbose=1)
+    reduce_lr = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=10, verbose=1)
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=1)
 
-    if backbone == "resnet50":
+    if backbone == "resnet18":
+        freeze_layer = 69
+    elif backbone == "resnet50":
         freeze_layer = 171
     else:
-        raise ValueError('Unsupported backbone - `{}`, Use resnet50.'.format(backbone))
+        raise ValueError('Unsupported backbone - `{}`, Use resnet50 or resnet18.'.format(backbone))
 
-    for i in range(freeze_layer):
-        model.layers[i].trainable = False
+    if backbone == "resnet50":
+        for i in range(freeze_layer):
+            model.layers[i].trainable = False
 
     #------------------------------------------------------#
     #   主干特征提取网络特征通用，冻结训练可以加快训练速度
@@ -111,9 +116,9 @@ if __name__ == "__main__":
     #------------------------------------------------------#
     if True:
         Lr = 1e-3
-        Batch_size = 4
-        Init_Epoch = 0
-        Freeze_Epoch = 50
+        Batch_size = 6
+        Init_Epoch = 81
+        Freeze_Epoch = 100
 
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
@@ -137,10 +142,10 @@ if __name__ == "__main__":
 
     if True:
         Lr = 1e-4
-        Batch_size = 3
-        Freeze_Epoch = 50
-        Epoch = 200
-        
+        Batch_size = 6
+        Freeze_Epoch = 100
+        Epoch = 300
+
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
         model.compile(
@@ -149,11 +154,11 @@ if __name__ == "__main__":
             optimizer=keras.optimizers.Adam(Lr)
         )
 
-        model.fit(gen.generate(True), 
+        model.fit(gen.generate(True),
                 steps_per_epoch=num_train//Batch_size,
                 validation_data=gen.generate(False),
                 validation_steps=num_val//Batch_size,
-                epochs=Epoch, 
+                epochs=Epoch,
                 verbose=1,
                 initial_epoch=Freeze_Epoch,
                 callbacks=[logging, checkpoint, reduce_lr, early_stopping])

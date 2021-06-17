@@ -10,9 +10,9 @@ from PIL import Image
 from tensorflow.keras.layers import Input
 from tqdm import tqdm
 
-from centernet import CenterNet
-from nets.centernet import centernet
-from utils.utils import centernet_correct_boxes, letterbox_image, nms
+from onenet import OneNet
+from nets.onenet import onenet
+from utils.utils import onenet_correct_boxes, letterbox_image, nms
 
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
@@ -37,7 +37,7 @@ def preprocess_image(image):
     std = [0.2886383, 0.27408165, 0.27809834]
     return ((np.float32(image) / 255.) - mean) / std
     
-class mAP_CenterNet(CenterNet):
+class mAP_OneNet(OneNet):
     #---------------------------------------------------#
     #   检测图片
     #---------------------------------------------------#
@@ -51,7 +51,7 @@ class mAP_CenterNet(CenterNet):
         #---------------------------------------------------------#
         crop_img = letterbox_image(image, [self.input_shape[0],self.input_shape[1]])
         #----------------------------------------------------------------------------------#
-        #   将RGB转化成BGR，这是因为原始的centernet_hourglass权值是使用BGR通道的图片训练的
+        #   将RGB转化成BGR，这是因为原始的onenet_hourglass权值是使用BGR通道的图片训练的
         #----------------------------------------------------------------------------------#
         photo = np.array(crop_img,dtype = np.float32)[:,:,::-1]
         #-----------------------------------------------------------#
@@ -61,7 +61,7 @@ class mAP_CenterNet(CenterNet):
         
         preds = self.get_pred(photo).numpy()
         #-------------------------------------------------------#
-        #   对于centernet网络来讲，确立中心非常重要。
+        #   对于onenet网络来讲，确立中心非常重要。
         #   对于大目标而言，会存在许多的局部信息。
         #   此时对于同一个大目标，中心点比较难以确定。
         #   使用最大池化的非极大抑制方法无法去除局部框
@@ -93,7 +93,7 @@ class mAP_CenterNet(CenterNet):
         #-----------------------------------------------------------#
         #   去掉灰条部分
         #-----------------------------------------------------------#
-        boxes = centernet_correct_boxes(top_ymin,top_xmin,top_ymax,top_xmax,np.array([self.input_shape[0],self.input_shape[1]]),image_shape)
+        boxes = onenet_correct_boxes(top_ymin,top_xmin,top_ymax,top_xmax,np.array([self.input_shape[0],self.input_shape[1]]),image_shape)
 
         for i, c in enumerate(top_label_indices):
             predicted_class = self.class_names[int(c)]
@@ -104,7 +104,7 @@ class mAP_CenterNet(CenterNet):
         f.close()
         return 
 
-centernet = mAP_CenterNet()
+onenet = mAP_OneNet()
 image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/train.txt').read().strip().split()
 
 if not os.path.exists("./input"):
@@ -118,6 +118,6 @@ for image_id in tqdm(image_ids):
     image_path = "./VOCdevkit/VOC2007/JPEGImages/"+image_id+".jpg"
     image = Image.open(image_path)
     image.save("./input/images-optional/"+image_id+".jpg")
-    centernet.detect_image(image_id,image)
+    onenet.detect_image(image_id,image)
     
 print("Conversion completed!")

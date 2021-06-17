@@ -12,6 +12,8 @@ from tensorflow.keras.layers import (Activation, AveragePooling2D,
 from tensorflow.keras.models import Model
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.regularizers import l2
+from tensorflow.keras import initializers
+
 
 def apply_ltrb(pred_ltrb):
 
@@ -133,7 +135,9 @@ def ResNet50(inputs):
 
     return x
 
-def centernet_head(x,num_classes):
+
+
+def onenet_head(x, num_classes, prior_prob):
     x = Dropout(rate=0.5)(x)
     #-------------------------------#
     #   解码器
@@ -149,10 +153,12 @@ def centernet_head(x,num_classes):
         x = Activation('relu')(x)
     # 最终获得128,128,64的特征层
     # cls header
+    bias_value = -tf.math.log((1 - prior_prob) / prior_prob)
     y1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(x)
     y1 = BatchNormalization()(y1)
     y1 = Activation('relu')(y1)
-    y1 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='sigmoid')(y1)
+    y1 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+                bias_initializer=initializers.Constant(value=bias_value),activation='sigmoid')(y1)
 
     # loc header (128*128*4)
     y2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(x)

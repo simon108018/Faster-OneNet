@@ -9,8 +9,8 @@ from tensorflow.keras.callbacks import (EarlyStopping, ReduceLROnPlateau,
 from tensorflow.keras.optimizers import Adam
 from tqdm import tqdm
 
-from nets.center_training import Generator
-from nets.centernet import centernet
+from nets.onenet_generator import Generator
+from nets.onenet import onenet
 
 # 防止bug
 def get_train_step_fn():
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     #----------------------------------------------------#
     #   获取centernet模型
     #----------------------------------------------------#
-    model = centernet(input_shape, num_classes=num_classes, backbone=backbone, mode='train')
+    model = onenet(input_shape, num_classes=num_classes, backbone=backbone, mode='train')
     
     #------------------------------------------------------#
     #   权值文件请看README，百度网盘下载
@@ -140,12 +140,12 @@ if __name__ == "__main__":
     num_val = int(len(lines)*val_split)
     num_train = len(lines) - num_val
 
-    if backbone == "resnet50":
+    if backbone == "resnet18":
+        freeze_layer = 69
+    elif backbone == "resnet50":
         freeze_layer = 171
-    elif backbone == "hourglass":
-        freeze_layer = 624
     else:
-        raise ValueError('Unsupported backbone - `{}`, Use resnet50, hourglass.'.format(backbone))
+        raise ValueError('Unsupported backbone - `{}`, Use resnet18, resnet50.'.format(backbone))
 
     for i in range(freeze_layer):
         model.layers[i].trainable = False
