@@ -31,9 +31,9 @@ class OneNet(object):
         "model_path"        : 'model_data/myweight.h5',
         "classes_path"      : 'model_data/voc_classes.txt',
         # "classes_path"      : 'model_data/coco_classes.txt',
-        "backbone"          : 'resnet18',
+        "backbone"          : 'resnet50',
         "input_shape"       : [512,512,3],
-        "confidence"        : 0.4,
+        "confidence"        : 0.6,
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
         # 也可以根据检测效果自行选择

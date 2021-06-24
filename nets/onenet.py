@@ -112,12 +112,8 @@ def onenet(input_shape, num_classes, backbone='resnet50', max_objects=100, mode=
     output_size = input_shape[0] // 4
     image_input = Input(shape=input_shape)
     cls_input = Input(shape=(max_objects, num_classes))
-    # hm_input = Input(shape=(output_size, output_size, num_classes))
-    # wh_input = Input(shape=(max_objects, 2))
-    # reg_input = Input(shape=(max_objects, 2))
     loc_input = Input(shape=(max_objects, 4))
     reg_mask_input = Input(shape=(max_objects,))
-    index_input = Input(shape=(max_objects,))
 
     if backbone=='resnet18':
         # -----------------------------------#

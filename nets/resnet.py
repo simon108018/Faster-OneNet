@@ -8,7 +8,7 @@ from tensorflow.keras import layers
 from tensorflow.keras.layers import (Activation, AveragePooling2D,
                                      BatchNormalization, Conv2D,
                                      Conv2DTranspose, Dense, Dropout, Flatten, Lambda,
-                                     Input, MaxPooling2D, ZeroPadding2D)
+                                     Input, MaxPooling2D, ZeroPadding2D, Add)
 from tensorflow.keras.models import Model
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.regularizers import l2
@@ -112,38 +112,45 @@ def ResNet50(inputs):
     # 128,128,64 -> 128,128,256
     x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1))
     x = identity_block(x, 3, [64, 64, 256], stage=2, block='b')
-    x = identity_block(x, 3, [64, 64, 256], stage=2, block='c')
+    o1 = identity_block(x, 3, [64, 64, 256], stage=2, block='c')
 
     # 128,128,256 -> 64,64,512
-    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a')
+    x = conv_block(o1, 3, [128, 128, 512], stage=3, block='a')
     x = identity_block(x, 3, [128, 128, 512], stage=3, block='b')
     x = identity_block(x, 3, [128, 128, 512], stage=3, block='c')
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='d')
+    o2 = identity_block(x, 3, [128, 128, 512], stage=3, block='d')
 
     # 64,64,512 -> 32,32,1024
-    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a')
+    x = conv_block(o2, 3, [256, 256, 1024], stage=4, block='a')
     x = identity_block(x, 3, [256, 256, 1024], stage=4, block='b')
     x = identity_block(x, 3, [256, 256, 1024], stage=4, block='c')
     x = identity_block(x, 3, [256, 256, 1024], stage=4, block='d')
     x = identity_block(x, 3, [256, 256, 1024], stage=4, block='e')
-    x = identity_block(x, 3, [256, 256, 1024], stage=4, block='f')
+    o3 = identity_block(x, 3, [256, 256, 1024], stage=4, block='f')
 
     # 32,32,1024 -> 16,16,2048
-    x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a')
+    x = conv_block(o3, 3, [512, 512, 2048], stage=5, block='a')
     x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b')
-    x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c')
-
+    o = identity_block(x, 3, [512, 512, 2048], stage=5, block='c')
+    x = [o, o1, o2, o3]
     return x
 
 
 
 def onenet_head(x, num_classes, prior_prob):
-    x = Dropout(rate=0.5)(x)
+    # x = Dropout(rate=0.5)(x)
+    x, o1, o2, o3 = x
     #-------------------------------#
     #   解码器
     #-------------------------------#
     num_filters = 256
-    # 16, 16, 2048  ->  32, 32, 256 -> 64, 64, 128 -> 128, 128, 64
+    #   Deconvolution
+    # 16, 16, 2048  ->  32, 32, 256  -> 64, 64, 128 -> 128, 128, 64
+    #   conv_output
+    # o             ||  o3           || o2          ||  o1
+    # 16, 16, 2048  ||  32, 32, 1024 || 64, 64, 512 || 128, 128, 256
+    # 將conv_output 再經過一次conv_layer 使 channel 相同，再經過Add_layer加起來
+    o = [o3, o2, o1]
     for i in range(3):
         # 进行上采样
         x = Conv2DTranspose(num_filters // pow(2, i), (4, 4), strides=2, use_bias=False, padding='same',
@@ -151,6 +158,7 @@ def onenet_head(x, num_classes, prior_prob):
                             kernel_regularizer=l2(5e-4))(x)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
+        x = Add()([x, Conv2D(num_filters // pow(2, i), (1, 1), strides=1, padding='same')(o[i])])
     # 最终获得128,128,64的特征层
     # cls header
     bias_value = -tf.math.log((1 - prior_prob) / prior_prob)

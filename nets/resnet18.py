@@ -74,18 +74,18 @@ def ResNet18(inputs):
 
     # 128,128,64 -> 128,128,64
     x = identity_block(x, 3, [64, 64], stage=2, block='a')
-    x = identity_block(x, 3, [64, 64], stage=2, block='b')
+    o1 = identity_block(x, 3, [64, 64], stage=2, block='b')
 
     # 128,128,64 -> 64,64,128
-    x = conv_block(x, 3, [128, 128], stage=3, block='a')
-    x = identity_block(x, 3, [128, 128], stage=3, block='b')
+    x = conv_block(o1, 3, [128, 128], stage=3, block='a')
+    o2 = identity_block(x, 3, [128, 128], stage=3, block='b')
 
     # 64,64,128 -> 32,32,256
-    x = conv_block(x, 3, [256, 256], stage=4, block='a')
-    x = identity_block(x, 3, [256, 256], stage=4, block='b')
+    x = conv_block(o2, 3, [256, 256], stage=4, block='a')
+    o3 = identity_block(x, 3, [256, 256], stage=4, block='b')
 
     # 32,32,256 -> 16,16,512
-    x = conv_block(x, 3, [512, 512], stage=5, block='a')
-    x = identity_block(x, 3, [512, 512], stage=5, block='b')
-
+    x = conv_block(o3, 3, [512, 512], stage=5, block='a')
+    o = identity_block(x, 3, [512, 512], stage=5, block='b')
+    x = [o, o1, o2, o3]
     return x

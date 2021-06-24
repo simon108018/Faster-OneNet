@@ -19,7 +19,7 @@ def focal_loss(cls_pred, cls_true, alpha = 0.25, gamma = 2.0):
 
     # (batch_size, max_objects, 128*128, num_classes)
     cls_loss = tfa.losses.sigmoid_focal_crossentropy(cls_true, cls_pred, alpha=alpha, gamma=gamma, from_logits=False)
-    cls_loss_for_matcher = tf.reduce_sum(
+    cls_loss_for_matcher = tf.reduce_mean(
         (- alpha * tf.pow(1 - cls_pred, gamma) * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * cls_true \
          -(1 - alpha) * tf.pow(cls_pred, gamma) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * (1.-cls_true)),
         axis=-1
@@ -94,7 +94,7 @@ def loss(args):
     cls_pred = tf.reshape(cls_pred, (b, w*h, c))
     loc_pred = tf.reshape(loc_pred, (b, w*h, 4))
     loc_pred = tf.divide(loc_pred, [w, h, w, h])
-    loc_true = tf.divide(loc_true, [w, h, w, h])
+    # loc_true = tf.divide(loc_true, [w, h, w, h])
 
     # 各種loss計算
     num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
@@ -102,7 +102,7 @@ def loss(args):
     loc_loss = reg_l1_loss(loc_pred, loc_true)
     giou_loss = GIOU(loc_pred, loc_true)
     # cls_loss[0] == cls_loss_for_matcher
-    total_loss = 2. * cls_losses[0] + 5. * loc_loss + 2. * giou_loss
+    total_loss = 4. * cls_losses[0] + 5. * loc_loss + 2. * giou_loss
 
     indices = MinCostMatcher(total_loss)
 
