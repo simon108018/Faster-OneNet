@@ -28,10 +28,10 @@ def preprocess_image(image):
 class OneNet(object):
     _defaults = {
         # "model_path"        : 'model_data/onenet_resnet50_voc.h5',
-        "model_path"        : 'model_data/myweight.h5',
+        "model_path"        : 'model_data/myweight3.h5',
         "classes_path"      : 'model_data/voc_classes.txt',
         # "classes_path"      : 'model_data/coco_classes.txt',
-        "backbone"          : 'resnet18',
+        "backbone"          : 'resnet50',
         "input_shape"       : [512,512,3],
         "confidence"        : 0.4,
         # backbone为resnet50时建议设置为True

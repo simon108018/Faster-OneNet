@@ -60,8 +60,8 @@ if __name__ == "__main__":
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
     if backbone == "resnet50":
-        # model_path = r"model_data/onenet_resnet50_voc.h5"
-        model_path = r"model_data/myweight2.h5"
+        model_path = r"model_data/onenet_resnet50_voc.h5"
+        # model_path = r"model_data/myweight2.h5"
         model.load_weights(model_path, by_name=True, skip_mismatch=True)
 
     #----------------------------------------------------#
@@ -116,8 +116,8 @@ if __name__ == "__main__":
     #------------------------------------------------------#
     if True:
         Lr = 1e-3
-        Batch_size = 6
-        Init_Epoch = 81
+        Batch_size = 5
+        Init_Epoch = 0
         Freeze_Epoch = 100
 
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     if True:
         Lr = 1e-4
-        Batch_size = 6
+        Batch_size = 5
         Freeze_Epoch = 100
         Epoch = 300
 
