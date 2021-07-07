@@ -47,7 +47,7 @@ if __name__ == "__main__":
     #   resnet50
     #   hourglass
     #-----------------------------#
-    backbone = "resnet18"
+    backbone = "resnet50"
 
     #----------------------------------------------------#
     #   获取onenet模型
@@ -61,9 +61,11 @@ if __name__ == "__main__":
     #------------------------------------------------------#
     if backbone == "resnet50":
         # model_path = r"model_data/onenet_resnet50_voc.h5"
-        model_path = r"model_data/myweight.h5"
+        model_path = r"model_data/onenet_50.h5"
         model.load_weights(model_path, by_name=True, skip_mismatch=True)
-
+    # elif backbone == "resnet18":
+    #     # model_path = r"model_data/myweight2.h5"
+    #     model.load_weights(model_path, by_name=True, skip_mismatch=True)
     #----------------------------------------------------#
     #   获得图片路径和标签
     #----------------------------------------------------#
@@ -76,7 +78,7 @@ if __name__ == "__main__":
     val_split = 0.1
     with open(annotation_path) as f:
         lines = f.readlines()
-    np.random.seed(10101)
+    np.random.seed(123)
     np.random.shuffle(lines)
     np.random.seed(None)
     num_val = int(len(lines)*val_split)
@@ -101,19 +103,19 @@ if __name__ == "__main__":
         logging = TensorBoard(log_dir="logs")
         checkpoint = ModelCheckpoint('logs/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.8, patience=8, verbose=1)
-    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=30, verbose=1)
+    # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.8, patience=8, verbose=1)
+    # early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=40, verbose=1)
 
     if backbone == "resnet18":
         freeze_layer = 69
     elif backbone == "resnet50":
-        freeze_layer = 171
+        freeze_layer = 175
     else:
         raise ValueError('Unsupported backbone - `{}`, Use resnet50 or resnet18.'.format(backbone))
 
     if backbone == "resnet50":
         for i in range(freeze_layer):
-            model.layers[i].trainable = False
+            model.layers[i].trainable = True
 
     #------------------------------------------------------#
     #   主干特征提取网络特征通用，冻结训练可以加快训练速度
@@ -124,16 +126,16 @@ if __name__ == "__main__":
     #   提示OOM或者显存不足请调小Batch_size
     #------------------------------------------------------#
     if True:
-        Lr = 1e-3
+        Lr = 1e-5
         Batch_size = 5
-        Init_Epoch = 0
-        Freeze_Epoch = 100
+        Init_Epoch = 120
+        Freeze_Epoch = 150
 
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
         model.compile(
             loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
-            loss_weights=[4, 5, 2],
+            loss_weights=[2, 5, 2],
             optimizer=keras.optimizers.Adam(Lr)
         )
 
@@ -144,22 +146,23 @@ if __name__ == "__main__":
                 epochs=Freeze_Epoch,
                 verbose=1,
                 initial_epoch=Init_Epoch,
-                callbacks=[logging, checkpoint, reduce_lr, early_stopping])
+                # callbacks=[logging, checkpoint, reduce_lr, early_stopping],
+                callbacks=[logging, checkpoint])
 
     for i in range(freeze_layer):
         model.layers[i].trainable = True
 
     if True:
-        Lr = 1e-4
+        Lr = 1e-6
         Batch_size = 5
-        Freeze_Epoch = 100
-        Epoch = 300
+        Freeze_Epoch = 150
+        Epoch = 200
 
         gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
         model.compile(
             loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
-            loss_weights=[4, 5, 2],
+            loss_weights=[2, 5, 2],
             optimizer=keras.optimizers.Adam(Lr)
         )
 
@@ -170,4 +173,5 @@ if __name__ == "__main__":
                 epochs=Epoch,
                 verbose=1,
                 initial_epoch=Freeze_Epoch,
-                callbacks=[logging, checkpoint, reduce_lr, early_stopping])
+                # callbacks=[logging, checkpoint, reduce_lr, early_stopping],
+                callbacks=[logging, checkpoint])

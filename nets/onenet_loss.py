@@ -102,7 +102,7 @@ def loss(args):
     loc_loss = reg_l1_loss(loc_pred, loc_true)
     giou_loss = GIOU(loc_pred, loc_true)
     # cls_loss[0] == cls_loss_for_matcher
-    total_loss = 4. * cls_losses[0] + 5. * loc_loss + 2. * giou_loss
+    total_loss = 2. * cls_losses[0] + 5. * loc_loss + 2. * giou_loss
 
     indices = MinCostMatcher(total_loss)
 

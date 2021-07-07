@@ -43,8 +43,8 @@ class mAP_OneNet(OneNet):
     #---------------------------------------------------#
     def detect_image(self,image_id,image):
         f = open("./input/detection-results/"+image_id+".txt","w")
-        self.confidence = 0.01
-        self.nms_threhold = 0.5
+        self.confidence = 0.1
+        self.nms_threhold = 0.2
         image_shape = np.array(np.shape(image)[0:2])
         #---------------------------------------------------------#
         #   给图像增加灰条，实现不失真的resize

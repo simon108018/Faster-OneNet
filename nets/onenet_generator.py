@@ -147,10 +147,10 @@ class Generator(object):
 
                 if len(y)!=0:
                     boxes = np.array(y[:,:4], dtype=np.float32)
-                    boxes[:,0] = boxes[:,0]/self.input_size[1]*self.output_size[1]
-                    boxes[:,1] = boxes[:,1]/self.input_size[0]*self.output_size[0]
-                    boxes[:,2] = boxes[:,2]/self.input_size[1]*self.output_size[1]
-                    boxes[:,3] = boxes[:,3]/self.input_size[0]*self.output_size[0]
+                    boxes[:,0] = boxes[:,0]/self.input_size[1]
+                    boxes[:,1] = boxes[:,1]/self.input_size[0]
+                    boxes[:,2] = boxes[:,2]/self.input_size[1]
+                    boxes[:,3] = boxes[:,3]/self.input_size[0]
 
                 for i in range(len(y)):
                     bbox = boxes[i].copy()

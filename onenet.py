@@ -28,12 +28,12 @@ def preprocess_image(image):
 class OneNet(object):
     _defaults = {
         # "model_path"        : 'model_data/onenet_resnet50_voc.h5',
-        "model_path"        : 'model_data/myweight3.h5',
+        "model_path"        : 'model_data/myweight2.h5',
         "classes_path"      : 'model_data/voc_classes.txt',
         # "classes_path"      : 'model_data/coco_classes.txt',
-        "backbone"          : 'resnet50',
+        "backbone"          : 'resnet18',
         "input_shape"       : [512,512,3],
-        "confidence"        : 0.6,
+        "confidence"        : 0.4,
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
         # 也可以根据检测效果自行选择
