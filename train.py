@@ -1,15 +1,31 @@
 import numpy as np
+import os
+
+from datetime import datetime
 import tensorflow as tf
+import tensorflow_addons as tfa
 from tensorflow import keras
 from tensorflow.keras.callbacks import (EarlyStopping, ReduceLROnPlateau,
                                         TensorBoard)
 from utils.utils import ModelCheckpoint
 from nets.onenet_generator import Generator
 from nets.onenet import onenet
-
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
+
+def new_log(logdir):
+    list_ = os.listdir(logdir)
+    list_.sort(key=lambda fn:os.path.getmtime(logdir+'/'+fn))
+    list_ = [l for l in list_ if '.h5' in l]
+    #获取文件所在目录
+    if list_:
+        newlog = os.path.join(logdir,list_[-1])
+    else:
+        print(2)
+        newlog = None
+    return newlog
+
 
 #---------------------------------------------------#
 #   获得类
@@ -60,12 +76,12 @@ if __name__ == "__main__":
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
     if backbone == "resnet50":
-        # model_path = r"model_data/onenet_resnet50_voc.h5"
-        model_path = r"model_data/onenet_50.h5"
+        model_path = new_log('./logs50')
+    elif backbone == "resnet18":
+        model_path = new_log('./logs18')
+
+    if model_path:
         model.load_weights(model_path, by_name=True, skip_mismatch=True)
-    # elif backbone == "resnet18":
-    #     # model_path = r"model_data/myweight2.h5"
-    #     model.load_weights(model_path, by_name=True, skip_mismatch=True)
     #----------------------------------------------------#
     #   获得图片路径和标签
     #----------------------------------------------------#
@@ -96,26 +112,14 @@ if __name__ == "__main__":
         checkpoint = ModelCheckpoint('logs50/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
     elif backbone == "resnet18":
-        logging = TensorBoard(log_dir="logs18")
+        logs = "logs18/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+        logging = TensorBoard(log_dir=logs, profile_batch=2, histogram_freq=1)
         checkpoint = ModelCheckpoint('logs18/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
     else:
         logging = TensorBoard(log_dir="logs")
         checkpoint = ModelCheckpoint('logs/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
-    # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.8, patience=8, verbose=1)
-    # early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=40, verbose=1)
-
-    if backbone == "resnet18":
-        freeze_layer = 69
-    elif backbone == "resnet50":
-        freeze_layer = 175
-    else:
-        raise ValueError('Unsupported backbone - `{}`, Use resnet50 or resnet18.'.format(backbone))
-
-    if backbone == "resnet50":
-        for i in range(freeze_layer):
-            model.layers[i].trainable = True
 
     #------------------------------------------------------#
     #   主干特征提取网络特征通用，冻结训练可以加快训练速度
@@ -125,53 +129,68 @@ if __name__ == "__main__":
     #   Epoch总训练世代
     #   提示OOM或者显存不足请调小Batch_size
     #------------------------------------------------------#
-    if True:
-        Lr = 1e-5
-        Batch_size = 5
-        Init_Epoch = 120
-        Freeze_Epoch = 150
 
-        gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
-        model.compile(
-            loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
-            loss_weights=[2, 5, 2],
-            optimizer=keras.optimizers.Adam(Lr)
-        )
+    if backbone == "resnet18":
+        freeze_layer = 12
+    elif backbone == "resnet50":
+        freeze_layer = 174
 
-        model.fit(gen.generate(True),
-                steps_per_epoch=num_train//Batch_size,
-                validation_data=gen.generate(False),
-                validation_steps=num_val//Batch_size,
-                epochs=Freeze_Epoch,
-                verbose=1,
-                initial_epoch=Init_Epoch,
-                # callbacks=[logging, checkpoint, reduce_lr, early_stopping],
-                callbacks=[logging, checkpoint])
+    else:
+        raise ValueError('Unsupported backbone - `{}`, Use resnet50 or resnet18.'.format(backbone))
 
     for i in range(freeze_layer):
-        model.layers[i].trainable = True
+        model.layers[i].trainable = False
 
-    if True:
-        Lr = 1e-6
-        Batch_size = 5
-        Freeze_Epoch = 150
-        Epoch = 200
+    Lr = 5e-5
+    Batch_size = 12
+    Init_Epoch = 0
+    Freeze_Epoch = 150
 
-        gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
+    gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
-        model.compile(
-            loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
-            loss_weights=[2, 5, 2],
-            optimizer=keras.optimizers.Adam(Lr)
-        )
+    model.compile(
+        loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
+        loss_weights=[2, 5, 2],
+        optimizer=tfa.optimizers.RectifiedAdam(lr=Lr,
+                                               total_steps=30000,
+                                               weight_decay=1e-4,
+                                               warmup_proportion=0.1,
+                                               min_lr=Lr * 1e-2))
 
-        model.fit(gen.generate(True),
-                steps_per_epoch=num_train//Batch_size,
-                validation_data=gen.generate(False),
-                validation_steps=num_val//Batch_size,
-                epochs=Epoch,
-                verbose=1,
-                initial_epoch=Freeze_Epoch,
-                # callbacks=[logging, checkpoint, reduce_lr, early_stopping],
-                callbacks=[logging, checkpoint])
+    model.fit(gen.generate(True),
+            steps_per_epoch=num_train//Batch_size,
+            validation_data=gen.generate(False),
+            validation_steps=num_val//Batch_size,
+            epochs=Freeze_Epoch,
+            verbose=1,
+            initial_epoch=Init_Epoch,
+            callbacks=[logging, checkpoint])
+
+    # for i in range(freeze_layer):
+    #     model.layers[i].trainable = False
+    #
+    # Lr = 5e-5
+    # Batch_size = 12
+    # Init_Epoch = 50
+    # Freeze_Epoch = 150
+    #
+    # gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
+    #
+    # model.compile(
+    #     loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
+    #     loss_weights=[2, 5, 2],
+    #     optimizer=tfa.optimizers.RectifiedAdam(lr=Lr,
+    #                                            total_steps=30000,
+    #                                            weight_decay=1e-4,
+    #                                            warmup_proportion=0.1,
+    #                                            min_lr=Lr * 1e-2))
+    #
+    # model.fit(gen.generate(True),
+    #         steps_per_epoch=num_train//Batch_size,
+    #         validation_data=gen.generate(False),
+    #         validation_steps=num_val//Batch_size,
+    #         epochs=Freeze_Epoch,
+    #         verbose=1,
+    #         initial_epoch=Init_Epoch,
+    #         callbacks=[logging, checkpoint])

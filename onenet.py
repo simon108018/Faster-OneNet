@@ -28,17 +28,18 @@ def preprocess_image(image):
 class OneNet(object):
     _defaults = {
         # "model_path"        : 'model_data/onenet_resnet50_voc.h5',
-        "model_path"        : 'model_data/myweight2.h5',
+        # "model_path"        : 'model_data/resnet18-ep300-loss2.644-val_loss2.654.h5',
+        "model_path"        : 'model_data/resnet50-ep150-loss3.251-val_loss3.275.h5',
         "classes_path"      : 'model_data/voc_classes.txt',
         # "classes_path"      : 'model_data/coco_classes.txt',
-        "backbone"          : 'resnet18',
-        "input_shape"       : [512,512,3],
-        "confidence"        : 0.4,
+        "backbone"          : 'resnet50',
+        "input_shape"       : [512, 512, 3],
+        "confidence"        : 0.3,
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
         # 也可以根据检测效果自行选择
         "nms"               : True,
-        "nms_threhold"      : 0.2,
+        "nms_threhold"      : 0.4,
     }
 
     @classmethod

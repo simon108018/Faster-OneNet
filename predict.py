@@ -18,7 +18,7 @@ gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 
-centernet = OneNet()
+onenet = OneNet()
 
 while True:
     img = input('Input image filename:')
@@ -30,5 +30,5 @@ while True:
             break
         continue
     else:
-        r_image = centernet.detect_image(image)
+        r_image = onenet.detect_image(image)
         r_image.show()

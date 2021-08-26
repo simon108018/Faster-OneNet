@@ -26,7 +26,7 @@ class Generator(object):
         self.num_classes = num_classes
         self.max_objects = max_objects
 
-    def get_random_data(self, annotation_line, input_shape, jitter=.3, hue=.1, sat=1.5, val=1.5, random=True):
+    def get_random_data(self, annotation_line, input_shape, jitter=.3, hue=.1, sat=1.5, val=1.5, random=False):
         '''r实时数据增强的随机预处理'''
         line = annotation_line.split()
         image = Image.open(line[0])
@@ -177,9 +177,6 @@ class Generator(object):
                         yield [batch_images, batch_cls, batch_loc, batch_reg_masks], np.zeros((self.batch_size,))
 
                     batch_images = np.zeros((self.batch_size, self.input_size[0], self.input_size[1], 3), dtype=np.float32)
-                    # batch_hms = np.zeros((self.batch_size, self.output_size[0], self.output_size[1], self.num_classes), dtype=np.float32)
                     batch_cls = np.zeros((self.batch_size, self.max_objects, self.num_classes), dtype=np.float32)
-                    # batch_whs = np.zeros((self.batch_size, self.max_objects, 2), dtype=np.float32)
-                    # batch_regs = np.zeros((self.batch_size, self.max_objects, 2), dtype=np.float32)
                     batch_loc = np.zeros((self.batch_size, self.max_objects, 4), dtype=np.float32)
                     batch_reg_masks = np.zeros((self.batch_size, self.max_objects), dtype=np.float32)

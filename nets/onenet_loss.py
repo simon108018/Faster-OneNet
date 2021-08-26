@@ -1,136 +1,129 @@
 import tensorflow as tf
 import tensorflow_addons as tfa
-
-def focal_loss(cls_pred, cls_true, alpha = 0.25, gamma = 2.0):
-    #   cls_true：類別真實值          (batch_size, max_objects, num_classes)
-    #   cls_pred：類別預測值          (batch_size, 128*128, num_classes)
-    #   將兩個值expand_dims到         (batch_size, max_objects, 128*128, num_classes)
-
-    max_objects = tf.shape(cls_true)[1]
-    w_x_h = tf.shape(cls_pred)[1]
-    cls_pred = tf.expand_dims(cls_pred, 1)
-    cls_pred = tf.tile(cls_pred, (1, max_objects, 1, 1))
-    cls_true = tf.expand_dims(cls_true, 2)
-    cls_true = tf.tile(cls_true, (1, 1, w_x_h, 1))
-    # (batch_size, max_objects, 128*128, num_classes)
-    cls_true = tf.cast(tf.equal(cls_true, 1), tf.float32)
-    # 為了節省記憶體，neg_mask 使用1-pos_mask
-    # neg_mask = tf.cast(tf.equal(cls_true, 0), tf.float32)
-
-    # (batch_size, max_objects, 128*128, num_classes)
-    cls_loss = tfa.losses.sigmoid_focal_crossentropy(cls_true, cls_pred, alpha=alpha, gamma=gamma, from_logits=False)
-    cls_loss_for_matcher = tf.reduce_mean(
-        (- alpha * tf.pow(1 - cls_pred, gamma) * tf.math.log(tf.clip_by_value(cls_pred, 1e-6, 1.)) * cls_true \
-         -(1 - alpha) * tf.pow(cls_pred, gamma) * tf.math.log(tf.clip_by_value(1 - cls_pred, 1e-6, 1.)) * (1.-cls_true)),
-        axis=-1
-    )
-    return [cls_loss_for_matcher, cls_loss]
+import tensorflow.keras.backend as K
+from tensorflow.keras.layers import Layer
 
 
-def reg_l1_loss(y_pred, y_true):
-    #   y_pred：位置預測值          (batch_size, 128*128, 4)
-    #   y_true：位置真實值          (batch_size, max_objects, 4)
-    #-------------------------------------------------------------------------#
-    #   將兩個值expand_dims到         (batch_size, max_objects, 128*128, 4)
-    #   計算後                       (batch_size, max_objects, 128*128)
-    #-------------------------------------------------------------------------#
-    w_x_h = tf.shape(y_pred)[1]
-    max_objects = tf.shape(y_true)[1]
-    y_pred = tf.expand_dims(y_pred, 1)
-    y_pred = tf.tile(y_pred, (1, max_objects, 1, 1))
-    y_true = tf.expand_dims(y_true, 2)
-    y_true = tf.tile(y_true, (1, 1, w_x_h, 1))
-    reg_loss = tf.reduce_sum(tf.abs(y_true - y_pred), axis=-1)
+class MinCostMatcher(Layer):
+    #     # -----------------------------------------------------------------------------------------------------------------#
+    #     #   total_loss：每個對應位置的loss(batch_size, max_objects, 128*128)
+    #     #   reg_mask：真实值的mask        (batch_size, max_objects)
+    #     # -----------------------------------------------------------------------------------------------------------------#
+    def __init__(self, alpha=0.25, gamma=2.0, name=None):
+        super(MinCostMatcher, self).__init__(name=name)
+        self.alpha = tf.cast(alpha, tf.float32)
+        self.gamma = tf.cast(gamma, tf.float32)
+    def call(self, args):
+        cls_pred, loc_pred, cls_true, loc_true, reg_mask = args
+        b, w, h, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
+        m = tf.shape(cls_true)[1]
+        cls_true = tf.cast(tf.equal(cls_true, 1), tf.float32)
+        cls_pred = tf.reshape(cls_pred, (b, w * h, c))
+        loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
+        loc_pred = tf.divide(loc_pred, [w, h, w, h])
 
-    return reg_loss
+        # cls
+
+        cls_prob = tf.sigmoid(tf.expand_dims(cls_pred, 1))
+        cls_true_ = tf.expand_dims(cls_true, 2)
+        neg_cost_class = (1 - self.alpha) * (cls_prob ** self.gamma) * (-tf.math.log(1 - cls_prob + 1e-8))
+        pos_cost_class = self.alpha * ((1 - cls_prob) ** self.gamma) * (-tf.math.log(cls_prob + 1e-8))
+        cls_loss = tf.reduce_sum((pos_cost_class - neg_cost_class) * cls_true_, axis=-1)
+        # loc
+        loc_pred_ = tf.expand_dims(loc_pred, 1)
+        loc_true_ = tf.expand_dims(loc_true, 2)
+        reg_loss = tf.reduce_sum(tf.abs(tf.subtract(loc_true_, loc_pred_)), axis=-1)
+        giou_loss = tfa.losses.giou_loss(loc_pred_, loc_true_)
+        total_loss = 2. * cls_loss + 5. * reg_loss + 2. * giou_loss
+
+        #  利用tf.argmin找出最match的框的位置
+        argmin_total = tf.expand_dims(tf.cast(tf.argmin(total_loss, axis=-1), tf.int32), -1)
+        batch = tf.expand_dims(tf.tile(tf.expand_dims(tf.range(0, b), 1), (1, m)), -1)
+        cls_id = tf.expand_dims(tf.cast(tf.argmax(cls_true, axis=-1), tf.int32), -1)
+        indices = tf.concat((batch, argmin_total, cls_id), -1)
+
+        return indices
+
+class Focal_loss(Layer):
+    def __init__(self, alpha=0.25, gamma=2.0, name=None):
+        super(Focal_loss, self).__init__(name=name)
+        self.alpha = tf.cast(alpha, tf.float32)
+        self.gamma = tf.cast(gamma, tf.float32)
+
+    def call(self, args):
+        cls_pred, cls_true, reg_mask, indices = args
+        b, w, h, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
+        cls_pred = tf.reshape(cls_pred, (b, w * h, c))
+        num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
+        scatter = tf.scatter_nd(indices=indices, updates=reg_mask, shape=[b, w * h, c])
+        labels = tf.cast(tf.greater(scatter, 0), tf.float32)
+        cls_loss = self.sigmoid_focal_loss(cls_pred, labels, alpha=self.alpha, gamma=self.gamma, reduction='sum') / num_box
+
+        return cls_loss
+
+    def sigmoid_focal_loss(self,
+        inputs: tf.Tensor,
+        targets: tf.Tensor,
+        alpha: float = -1,
+        gamma: float = 2,
+        reduction: str = "none",
+    ) -> tf.Tensor:
+        """
+        Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+        Args:
+            inputs: A float tensor of arbitrary shape.
+                    The predictions for each example.
+            targets: A float tensor with the same shape as inputs. Stores the binary
+                     classification label for each element in inputs
+                    (0 for the negative class and 1 for the positive class).
+            alpha: (optional) Weighting factor in range (0,1) to balance
+                    positive vs negative examples. Default = -1 (no weighting).
+            gamma: Exponent of the modulating factor (1 - p_t) to
+                   balance easy vs hard examples.
+            reduction: 'none' | 'mean' | 'sum'
+                     'none': No reduction will be applied to the output.
+                     'mean': The output will be averaged.
+                     'sum': The output will be summed.
+        Returns:
+            Loss tensor with the reduction option applied.
+        """
+        # p = torch.sigmoid(inputs)
+        p = tf.sigmoid(inputs)
+        # ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+        ce_loss = K.binary_crossentropy(target=targets, output=inputs, from_logits=True)
+        p_t = p * targets + (1 - p) * (1 - targets)
+        loss = ce_loss * ((1 - p_t) ** gamma)
+
+        if alpha >= 0:
+            alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+            loss = alpha_t * loss
+
+        if reduction == "mean":
+            loss = tf.reduce_mean(loss)
+        elif reduction == "sum":
+            loss = tf.reduce_sum(loss)
+
+        return loss
 
 
-def GIOU(y_pred, y_true):
-    #   y_pred：位置預測值          (batch_size, 128*128, 4)
-    #   y_true：位置真實值          (batch_size, max_objects, 4)
-    #-------------------------------------------------------------------------#
-    #   將兩個值expand_dims到         (batch_size, max_objects, 128*128, 4)
-    #   計算後                       (batch_size, max_objects, 128*128)
-    #-------------------------------------------------------------------------#
-    w_x_h = tf.shape(y_pred)[1]
-    max_objects = tf.shape(y_true)[1]
-    y_pred = tf.expand_dims(y_pred, 1)
-    y_pred = tf.tile(y_pred, (1, max_objects, 1, 1))
-    y_true = tf.expand_dims(y_true, 2)
-    y_true = tf.tile(y_true, (1, 1, w_x_h, 1))
-
-    giou_loss = tfa.losses.giou_loss(y_pred, y_true)
-
+def giou_loss(args):
+    loc_pred, loc_true, reg_mask, indices = args
+    b, w, h= tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
+    loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
+    loc_pred = tf.divide(loc_pred, [w, h, w, h])
+    num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
+    loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
+    giou_loss = tf.reduce_sum(tfa.losses.giou_loss(loc_pred_, loc_true) * reg_mask) / num_box
     return giou_loss
 
 
-def MinCostMatcher(total_loss):
-    # -----------------------------------------------------------------------------------------------------------------#
-    #   total_loss：每個對應位置的loss(batch_size, max_objects, 128*128)
-    #   reg_mask：真实值的mask        (batch_size, max_objects)
-    # -----------------------------------------------------------------------------------------------------------------#
-    b, k = tf.shape(total_loss)[0], tf.shape(total_loss)[1]
-    #  利用tf.argmin找出最match的框的位置
-    argmin_total = tf.expand_dims(tf.cast(tf.argmin(total_loss, axis=-1), tf.int32), -1)
-    grid = tf.meshgrid(tf.range(0, b), tf.range(0, k))
-    grid = tf.transpose(grid)
-    indices = tf.reshape(tf.concat((grid, argmin_total), -1), (b, k, 3))
-
-    return indices
-
-
-def loss(args):
-    #-----------------------------------------------------------------------------------------------------------------#
-    #   cls_pred：類別預測值          (batch_size, 128, 128, num_classes) --> (batch_size, 128*128, num_classes)
-    #   loc_pred：位置預測值          (batch_size, 128, 128, 4)-------------> (batch_size, 128*128, 4)
-    #   cls_true：類別真實值          (batch_size, max_objects, num_classes)
-    #   loc_true：位置真實值          (batch_size, max_objects, 4)
-    #   reg_mask：真实值的mask        (batch_size, max_objects)
-    #   indices：真实值对应的坐标     (batch_size, max_objects) 回傳值 [0, 128*128)
-    #   total_loss：每個對應位置的loss (batch_size, max_objects, 128*128)
-    #-----------------------------------------------------------------------------------------------------------------#
-    cls_pred, loc_pred, cls_true, loc_true, reg_mask = args
-    b, w, h, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
-    cls_pred = tf.reshape(cls_pred, (b, w*h, c))
-    loc_pred = tf.reshape(loc_pred, (b, w*h, 4))
+def loc_loss(args):
+    loc_pred, loc_true, reg_mask, indices = args
+    b, w, h = tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
+    loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
     loc_pred = tf.divide(loc_pred, [w, h, w, h])
-    # loc_true = tf.divide(loc_true, [w, h, w, h])
-
-    # 各種loss計算
     num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
-    cls_losses = focal_loss(cls_pred, cls_true) #cls_losses : [cls_loss_for_matcher, cls_loss]
-    loc_loss = reg_l1_loss(loc_pred, loc_true)
-    giou_loss = GIOU(loc_pred, loc_true)
-    # cls_loss[0] == cls_loss_for_matcher
-    total_loss = 2. * cls_losses[0] + 5. * loc_loss + 2. * giou_loss
+    loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
+    reg_loss = tf.reduce_sum(tf.abs(tf.subtract(loc_true, loc_pred_)) * tf.expand_dims(reg_mask, -1)) / num_box
 
-    indices = MinCostMatcher(total_loss)
-
-    # 從位置計算各個loss
-    # cls_losses[1] : cls_loss
-    min_cls_loss = tf.gather_nd(cls_losses[1], indices) * reg_mask
-    min_loc_loss = tf.gather_nd(loc_loss, indices) * reg_mask
-    min_giou_loss = tf.gather_nd(giou_loss, indices) * reg_mask
-
-    # reg_mask的用途在於有些objects 不存在，會有多算的loss
-
-    mean_min_cls = tf.cond(tf.equal(num_box, 0.), lambda: 0., lambda: tf.reduce_sum(min_cls_loss) / num_box)
-    mean_min_loc = tf.cond(tf.equal(num_box, 0.), lambda: 0., lambda: tf.reduce_sum(min_loc_loss) / num_box)
-    mean_min_giou = tf.cond(tf.equal(num_box, 0.), lambda: 0., lambda: tf.reduce_sum(min_giou_loss) / num_box)
-
-    return mean_min_cls, mean_min_loc, mean_min_giou
-
-@tf.function
-def cls(mean_min_cls):
-    return mean_min_cls
-
-@tf.function
-def loc(mean_min_loc):
-    return mean_min_loc
-
-@tf.function
-def giou(mean_min_giou):
-    return mean_min_giou
-
-
-
+    return reg_loss

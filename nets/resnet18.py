@@ -1,91 +1,143 @@
-#-------------------------------------------------------------#
-#   ResNet50的网络部分
-#-------------------------------------------------------------#
-import numpy as np
-import tensorflow.keras.backend as K
+import config as c
 import tensorflow as tf
-from tensorflow.keras import layers
-from tensorflow.keras.layers import (Activation, AveragePooling2D,
-                                     BatchNormalization, Conv2D,
-                                     Conv2DTranspose, Dense, Dropout, Flatten, Lambda,
-                                     Input, MaxPooling2D, ZeroPadding2D)
-from tensorflow.keras.models import Model
-from tensorflow.keras.preprocessing import image
-from tensorflow.keras.regularizers import l2
+from tensorflow.keras.layers import Conv2D, GlobalAvgPool2D, BatchNormalization, Dense
 
 
+class BasicBlock(tf.keras.layers.Layer):
+    def __init__(self, filters, strides=(1, 1), **kwargs):
+        self.strides = strides
+        if self.strides != (1, 1):
+            self.shortcut_projection = Conv2D(filters, (1, 1), name='projection', padding='same', use_bias=False)
+            self.shortcut_bn = BatchNormalization(name='shortcut_bn', momentum=0.9, epsilon=1e-5)
+
+        self.conv_0 = Conv2D(filters, (3, 3), name='conv_0', strides=self.strides, padding='same', use_bias=False)
+        self.conv_1 = Conv2D(filters, (3, 3), name='conv_1', padding='same', use_bias=False)
+        self.bn_0 = BatchNormalization(name='bn_0', momentum=0.9, epsilon=1e-5)
+        self.bn_1 = BatchNormalization(name='bn_1', momentum=0.9, epsilon=1e-5)
+
+        super(BasicBlock, self).__init__(**kwargs)
+
+    def call(self, inputs, training):
+        net = self.conv_0(inputs)
+        net = self.bn_0(net, training=training)
+        net = tf.nn.relu(net)
+
+        net = self.conv_1(net)
+        net = self.bn_1(net, training=training)
+
+        if self.strides != (1, 1):
+            shortcut = tf.nn.avg_pool2d(inputs, ksize=(2, 2), strides=(2, 2), padding='SAME')
+            shortcut = self.shortcut_projection(shortcut)
+            shortcut = self.shortcut_bn(shortcut)
+        else:
+            shortcut = inputs
+
+        net = net + shortcut
+        net = tf.nn.relu(net)
+        return net
 
 
-def identity_block(input_tensor, kernel_size, filters, stage, block):
+class BottleneckBlock(tf.keras.layers.Layer):
+    def __init__(self, filters, strides=(1, 1), projection=False, **kwargs):
+        self.strides = strides
+        self.projection = projection
+        if self.strides != (1, 1) or self.projection:
+            self.shortcut_projection = Conv2D(filters * 4, (1, 1), name='projection', padding='same', use_bias=False)
+            self.shortcut_bn = BatchNormalization(name='shortcut_bn', momentum=0.9, epsilon=1e-5)
 
-    filters1, filters2 = filters
+        self.conv_0 = Conv2D(filters, (1, 1), name='conv_0', padding='same', use_bias=False)
+        self.conv_1 = Conv2D(filters, (3, 3), name='conv_1', strides=strides, padding='same', use_bias=False)
+        self.conv_2 = Conv2D(filters * 4, (1, 1), name='conv_2', padding='same', use_bias=False)
+        self.bn_0 = BatchNormalization(name='bn_0', momentum=0.9, epsilon=1e-5)
+        self.bn_1 = BatchNormalization(name='bn_1', momentum=0.9, epsilon=1e-5)
+        self.bn_2 = BatchNormalization(name='bn_2', momentum=0.9, epsilon=1e-5)
 
-    conv_name_base = 'res' + str(stage) + block + '_branch'
-    bn_name_base = 'bn' + str(stage) + block + '_branch'
+        super(BottleneckBlock, self).__init__(**kwargs)
 
-    x = Conv2D(filters1, kernel_size, padding="same", name=conv_name_base + '2a', use_bias=False)(input_tensor)
-    x = BatchNormalization(name=bn_name_base + '2a')(x)
-    x = Activation('relu')(x)
+    def call(self, inputs, training):
+        net = self.conv_0(inputs)
+        net = self.bn_0(net, training=training)
+        net = tf.nn.relu(net)
 
-    x = Conv2D(filters2, kernel_size, padding='same', name=conv_name_base + '2b', use_bias=False)(x)
-    x = BatchNormalization(name=bn_name_base + '2b')(x)
-    x = Activation('relu')(x)
+        net = self.conv_1(net)
+        net = self.bn_1(net, training=training)
+        net = tf.nn.relu(net)
 
-    x = layers.add([x, input_tensor])
-    x = Activation('relu')(x)
-    return x
+        net = self.conv_2(net)
+        net = self.bn_2(net, training=training)
 
+        if self.projection:
+            shortcut = self.shortcut_projection(inputs)
+            shortcut = self.shortcut_bn(shortcut, training=training)
+        elif self.strides != (1, 1):
+            shortcut = tf.nn.avg_pool2d(inputs, ksize=(2, 2), strides=(2, 2), padding='SAME')
+            shortcut = self.shortcut_projection(shortcut)
+            shortcut = self.shortcut_bn(shortcut, training=training)
+        else:
+            shortcut = inputs
 
-def conv_block(input_tensor, kernel_size, filters, stage, block, strides=(2, 2)):
-
-    filters1, filters2 = filters
-
-    conv_name_base = 'res' + str(stage) + block + '_branch'
-    bn_name_base = 'bn' + str(stage) + block + '_branch'
-
-    x = Conv2D(filters1, kernel_size, padding='same', strides=strides,
-               name=conv_name_base + '2a', use_bias=False)(input_tensor)
-    x = BatchNormalization(name=bn_name_base + '2a')(x)
-    x = Activation('relu')(x)
-
-    x = Conv2D(filters2, kernel_size, padding='same',
-               name=conv_name_base + '2b', use_bias=False)(x)
-    x = BatchNormalization(name=bn_name_base + '2b')(x)
-
-    shortcut = Conv2D(filters2, (1, 1), strides=strides,
-                      name=conv_name_base + '1', use_bias=False)(input_tensor)
-    shortcut = BatchNormalization(name=bn_name_base + '1')(shortcut)
-
-    x = layers.add([x, shortcut])
-    x = Activation('relu')(x)
-    return x
+        net = net + shortcut
+        net = tf.nn.relu(net)
+        return net
 
 
-def ResNet18(inputs):
-    # 512x512x3
-    x = ZeroPadding2D((3, 3))(inputs)
-    # 256,256,64
-    x = Conv2D(64, (7, 7), strides=(2, 2), name='conv1', use_bias=False)(x)
-    x = BatchNormalization(name='bn_conv1')(x)
-    x = Activation('relu')(x)
+class ResNet(tf.keras.models.Model):
+    def __init__(self, layer_num, **kwargs):
+        super(ResNet, self).__init__(**kwargs)
+        if c.block_type[layer_num] == 'basic block':
+            self.block = BasicBlock
+        else:
+            self.block = BottleneckBlock
 
-    # 256,256,64 -> 128,128,64
-    x = MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)
+        self.conv0 = Conv2D(64, (7, 7), strides=(2, 2), name='conv0', padding='same', use_bias=False)
+        self.bn = BatchNormalization(name='bn', momentum=0.9, epsilon=1e-5)
 
-    # 128,128,64 -> 128,128,64
-    x = identity_block(x, 3, [64, 64], stage=2, block='a')
-    o1 = identity_block(x, 3, [64, 64], stage=2, block='b')
+        self.block_collector = []
+        for layer_index, (b, f) in enumerate(zip(c.block_num[layer_num], c.filter_num), start=1):
+            if layer_index == 1:
+                if c.block_type[layer_num] == 'basic block':
+                    self.block_collector.append(self.block(f, name='conv1_0'))
+                else:
+                    self.block_collector.append(self.block(f, projection=True, name='conv1_0'))
+            else:
+                self.block_collector.append(self.block(f, strides=(2, 2), name='conv{}_0'.format(layer_index)))
 
-    # 128,128,64 -> 64,64,128
-    x = conv_block(o1, 3, [128, 128], stage=3, block='a')
-    o2 = identity_block(x, 3, [128, 128], stage=3, block='b')
+            for block_index in range(1, b):
+                self.block_collector.append(self.block(f, name='conv{}_{}'.format(layer_index, block_index)))
 
-    # 64,64,128 -> 32,32,256
-    x = conv_block(o2, 3, [256, 256], stage=4, block='a')
-    o3 = identity_block(x, 3, [256, 256], stage=4, block='b')
+        self.global_average_pooling = GlobalAvgPool2D()
+        self.fc = Dense(c.category_num, name='fully_connected', activation='softmax', use_bias=False)
 
-    # 32,32,256 -> 16,16,512
-    x = conv_block(o3, 3, [512, 512], stage=5, block='a')
-    o = identity_block(x, 3, [512, 512], stage=5, block='b')
+    def call(self, inputs, training=None):
+        net = self.conv0(inputs)
+        net = self.bn(net, training)
+        net = tf.nn.relu(net)
+        # print('input', inputs.shape)
+        # print('conv0', net.shape)
+        net = tf.nn.max_pool2d(net, ksize=(3, 3), strides=(2, 2), padding='SAME')
+        # print('max-pooling', net.shape)
+
+        for block in self.block_collector:
+            net = block(net, training)
+            # print(block.name, net.shape)
+
+        net = self.global_average_pooling(net)
+        # print('global average-pooling', net.shape)
+        net = self.fc(net)
+        # print('fully connected', net.shape)
+        return net
+
+    def build_model(self, image_input=tf.keras.Input(shape=(512, 512, 3))):
+
+        return tf.keras.models.Model(inputs=[image_input], outputs=self.call(image_input))
+
+
+def ResNet18(image_input):
+    model = ResNet(18).build_model(image_input=image_input)
+    model.load_weights('./ResNet_18.h5')
+    o1 = model.get_layer('conv1_1').output
+    o2 = model.get_layer('conv2_1').output
+    o3 = model.get_layer('conv3_1').output
+    o = model.get_layer('conv4_1').output
     x = [o, o1, o2, o3]
     return x
