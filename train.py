@@ -63,7 +63,7 @@ if __name__ == "__main__":
     #   resnet50
     #   hourglass
     #-----------------------------#
-    backbone = "resnet50"
+    backbone = "resnet18"
 
     #----------------------------------------------------#
     #   获取onenet模型
@@ -115,45 +115,25 @@ if __name__ == "__main__":
         logs = "logs18/" + datetime.now().strftime("%Y%m%d-%H%M%S")
         logging = TensorBoard(log_dir=logs, profile_batch=2, histogram_freq=1)
         checkpoint = ModelCheckpoint('logs18/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
-                                     monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
+                                     monitor='val_loss', save_weights_only=False, save_best_only=False, period=1)
     else:
         logging = TensorBoard(log_dir="logs")
+
         checkpoint = ModelCheckpoint('logs/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
 
-    #------------------------------------------------------#
-    #   主干特征提取网络特征通用，冻结训练可以加快训练速度
-    #   也可以在训练初期防止权值被破坏。
-    #   Init_Epoch为起始世代
-    #   Freeze_Epoch为冻结训练的世代
-    #   Epoch总训练世代
-    #   提示OOM或者显存不足请调小Batch_size
-    #------------------------------------------------------#
-
-
-    if backbone == "resnet18":
-        freeze_layer = 12
-    elif backbone == "resnet50":
-        freeze_layer = 174
-
-    else:
-        raise ValueError('Unsupported backbone - `{}`, Use resnet50 or resnet18.'.format(backbone))
-
-    for i in range(freeze_layer):
-        model.layers[i].trainable = False
-
-    Lr = 5e-5
+    Lr = 5e-4
     Batch_size = 12
     Init_Epoch = 0
-    Freeze_Epoch = 150
+    Epoch = 750
 
     gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
 
     model.compile(
         loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
         loss_weights=[2, 5, 2],
-        optimizer=tfa.optimizers.RectifiedAdam(lr=Lr,
-                                               total_steps=30000,
+        optimizer=tfa.optimizers.RectifiedAdam(learning_rate=Lr,
+                                               total_steps=120000,
                                                weight_decay=1e-4,
                                                warmup_proportion=0.1,
                                                min_lr=Lr * 1e-2))
@@ -162,35 +142,7 @@ if __name__ == "__main__":
             steps_per_epoch=num_train//Batch_size,
             validation_data=gen.generate(False),
             validation_steps=num_val//Batch_size,
-            epochs=Freeze_Epoch,
+            epochs=Epoch,
             verbose=1,
             initial_epoch=Init_Epoch,
             callbacks=[logging, checkpoint])
-
-    # for i in range(freeze_layer):
-    #     model.layers[i].trainable = False
-    #
-    # Lr = 5e-5
-    # Batch_size = 12
-    # Init_Epoch = 50
-    # Freeze_Epoch = 150
-    #
-    # gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
-    #
-    # model.compile(
-    #     loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
-    #     loss_weights=[2, 5, 2],
-    #     optimizer=tfa.optimizers.RectifiedAdam(lr=Lr,
-    #                                            total_steps=30000,
-    #                                            weight_decay=1e-4,
-    #                                            warmup_proportion=0.1,
-    #                                            min_lr=Lr * 1e-2))
-    #
-    # model.fit(gen.generate(True),
-    #         steps_per_epoch=num_train//Batch_size,
-    #         validation_data=gen.generate(False),
-    #         validation_steps=num_val//Batch_size,
-    #         epochs=Freeze_Epoch,
-    #         verbose=1,
-    #         initial_epoch=Init_Epoch,
-    #         callbacks=[logging, checkpoint])

@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow.keras.backend as K
@@ -9,11 +10,12 @@ class MinCostMatcher(Layer):
     #     #   total_loss：每個對應位置的loss(batch_size, max_objects, 128*128)
     #     #   reg_mask：真实值的mask        (batch_size, max_objects)
     #     # -----------------------------------------------------------------------------------------------------------------#
-    def __init__(self, alpha=0.25, gamma=2.0, name=None):
-        super(MinCostMatcher, self).__init__(name=name)
-        self.alpha = tf.cast(alpha, tf.float32)
-        self.gamma = tf.cast(gamma, tf.float32)
-    def call(self, args):
+    def __init__(self, alpha=0.25, gamma=2.0, name=None, **kwargs):
+        super(MinCostMatcher, self).__init__(name=name, **kwargs)
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def call(self, args, **kwargs):
         cls_pred, loc_pred, cls_true, loc_true, reg_mask = args
         b, w, h, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
         m = tf.shape(cls_true)[1]
@@ -24,7 +26,7 @@ class MinCostMatcher(Layer):
 
         # cls
 
-        cls_prob = tf.sigmoid(tf.expand_dims(cls_pred, 1))
+        cls_prob = tf.expand_dims(cls_pred, 1)
         cls_true_ = tf.expand_dims(cls_true, 2)
         neg_cost_class = (1 - self.alpha) * (cls_prob ** self.gamma) * (-tf.math.log(1 - cls_prob + 1e-8))
         pos_cost_class = self.alpha * ((1 - cls_prob) ** self.gamma) * (-tf.math.log(cls_prob + 1e-8))
@@ -44,30 +46,38 @@ class MinCostMatcher(Layer):
 
         return indices
 
-class Focal_loss(Layer):
-    def __init__(self, alpha=0.25, gamma=2.0, name=None):
-        super(Focal_loss, self).__init__(name=name)
-        self.alpha = tf.cast(alpha, tf.float32)
-        self.gamma = tf.cast(gamma, tf.float32)
+    def get_config(self):
+        config = super(MinCostMatcher, self).get_config()
+        config.update({'alpha': self.alpha,
+                       'gamma': self.gamma})
+        return config
 
-    def call(self, args):
+
+class Focal_loss(Layer):
+    def __init__(self, alpha=0.25, gamma=2.0, name=None, **kwargs):
+        super(Focal_loss, self).__init__(name=name, **kwargs)
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def call(self, args, **kwargs):
         cls_pred, cls_true, reg_mask, indices = args
         b, w, h, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
         cls_pred = tf.reshape(cls_pred, (b, w * h, c))
         num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
         scatter = tf.scatter_nd(indices=indices, updates=reg_mask, shape=[b, w * h, c])
         labels = tf.cast(tf.greater(scatter, 0), tf.float32)
-        cls_loss = self.sigmoid_focal_loss(cls_pred, labels, alpha=self.alpha, gamma=self.gamma, reduction='sum') / num_box
+        cls_loss = self.sigmoid_focal_loss(cls_pred, labels, alpha=self.alpha, gamma=self.gamma,
+                                           reduction='sum') / num_box
 
         return cls_loss
 
     def sigmoid_focal_loss(self,
-        inputs: tf.Tensor,
-        targets: tf.Tensor,
-        alpha: float = -1,
-        gamma: float = 2,
-        reduction: str = "none",
-    ) -> tf.Tensor:
+                           inputs: tf.Tensor,
+                           targets: tf.Tensor,
+                           alpha: float = -1,
+                           gamma: float = 2,
+                           reduction: str = "none",
+                           ) -> tf.Tensor:
         """
         Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
         Args:
@@ -87,11 +97,9 @@ class Focal_loss(Layer):
         Returns:
             Loss tensor with the reduction option applied.
         """
-        # p = torch.sigmoid(inputs)
-        p = tf.sigmoid(inputs)
         # ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-        ce_loss = K.binary_crossentropy(target=targets, output=inputs, from_logits=True)
-        p_t = p * targets + (1 - p) * (1 - targets)
+        ce_loss = K.binary_crossentropy(target=targets, output=inputs, from_logits=False)
+        p_t = inputs * targets + (1 - inputs) * (1 - targets)
         loss = ce_loss * ((1 - p_t) ** gamma)
 
         if alpha >= 0:
@@ -105,25 +113,47 @@ class Focal_loss(Layer):
 
         return loss
 
-
-def giou_loss(args):
-    loc_pred, loc_true, reg_mask, indices = args
-    b, w, h= tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
-    loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
-    loc_pred = tf.divide(loc_pred, [w, h, w, h])
-    num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
-    loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
-    giou_loss = tf.reduce_sum(tfa.losses.giou_loss(loc_pred_, loc_true) * reg_mask) / num_box
-    return giou_loss
+    def get_config(self):
+        config = super(Focal_loss, self).get_config()
+        config.update({'alpha': self.alpha,
+                       'gamma': self.gamma})
+        return config
 
 
-def loc_loss(args):
-    loc_pred, loc_true, reg_mask, indices = args
-    b, w, h = tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
-    loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
-    loc_pred = tf.divide(loc_pred, [w, h, w, h])
-    num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
-    loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
-    reg_loss = tf.reduce_sum(tf.abs(tf.subtract(loc_true, loc_pred_)) * tf.expand_dims(reg_mask, -1)) / num_box
+class Giou_loss(Layer):
+    def __init__(self, name=None, **kwargs):
+        super(Giou_loss, self).__init__(name=name, **kwargs)
 
-    return reg_loss
+    def call(self, args, **kwargs):
+        loc_pred, loc_true, reg_mask, indices = args
+        b, w, h = tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
+        loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
+        loc_pred = tf.divide(loc_pred, [w, h, w, h])
+        num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
+        loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
+        giou_loss = tf.reduce_sum(tfa.losses.giou_loss(loc_pred_, loc_true) * reg_mask) / num_box
+        return giou_loss
+
+    def get_config(self):
+        config = super(Giou_loss, self).get_config()
+        return config
+
+
+class Loc_loss(Layer):
+    def __init__(self, name=None, **kwargs):
+        super(Loc_loss, self).__init__(name=name, **kwargs)
+
+    def call(self, args, **kwargs):
+        loc_pred, loc_true, reg_mask, indices = args
+        b, w, h = tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
+        loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
+        loc_pred = tf.divide(loc_pred, [w, h, w, h])
+        num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
+        loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
+        reg_loss = tf.reduce_sum(tf.abs(tf.subtract(loc_true, loc_pred_)) * tf.expand_dims(reg_mask, -1)) / num_box
+
+        return reg_loss
+
+    def get_config(self):
+        config = super(Loc_loss, self).get_config()
+        return config

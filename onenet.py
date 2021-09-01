@@ -29,7 +29,7 @@ class OneNet(object):
     _defaults = {
         # "model_path"        : 'model_data/onenet_resnet50_voc.h5',
         # "model_path"        : 'model_data/resnet18-ep300-loss2.644-val_loss2.654.h5',
-        "model_path"        : 'model_data/resnet50-ep150-loss3.251-val_loss3.275.h5',
+        "model_path"        : 'model_data/ep148-loss3.620-val_loss3.584.h5',
         "classes_path"      : 'model_data/voc_classes.txt',
         # "classes_path"      : 'model_data/coco_classes.txt',
         "backbone"          : 'resnet50',
