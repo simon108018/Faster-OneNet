@@ -3,7 +3,7 @@
 #   map测试请看get_dr_txt.py、get_gt_txt.py
 #   和get_map.py
 #--------------------------------------------#
-from nets.centernet import centernet
+from nets.onenet import centernet
 
 if __name__ == "__main__":
     model = centernet([512,512,3], 20, backbone='resnet50')

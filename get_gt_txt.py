@@ -22,7 +22,7 @@ def get_classes(classes_path):
     class_names = [c.strip() for c in class_names]
     return class_names
 
-image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/test.txt').read().strip().split()
+image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/train.txt').read().strip().split()
 
 if not os.path.exists("./input"):
     os.makedirs("./input")

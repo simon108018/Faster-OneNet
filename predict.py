@@ -10,7 +10,7 @@ predict.py有几个注意点
 比如判断if predicted_class == 'car': 即可判断当前目标是否为车，然后记录数量即可。利用draw.text即可写字。
 '''
 from tensorflow.keras.layers import Input
-from centernet import CenterNet
+from onenet import OneNet
 from PIL import Image
 import tensorflow as tf
 
@@ -18,7 +18,7 @@ gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 
-centernet = CenterNet()
+onenet = OneNet()
 
 while True:
     img = input('Input image filename:')
@@ -26,7 +26,9 @@ while True:
         image = Image.open(img)
     except:
         print('Open Error! Try again!')
+        if img == 'n':
+            break
         continue
     else:
-        r_image = centernet.detect_image(image)
+        r_image = onenet.detect_image(image)
         r_image.show()

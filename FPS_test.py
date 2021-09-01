@@ -11,8 +11,8 @@ from PIL import Image
 from tensorflow.keras.layers import Input
 from tqdm import tqdm
 
-from centernet import CenterNet
-from nets.centernet import centernet
+from onenet import CenterNet
+from nets.onenet import centernet
 from utils.utils import centernet_correct_boxes, letterbox_image, nms
 
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
