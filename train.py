@@ -82,6 +82,7 @@ if __name__ == "__main__":
     model_path = new_log(path)
     if model_path:
         model.load_weights(model_path, by_name=True, skip_mismatch=True)
+        print('successful load weights from {}'.format(model_path))
     #----------------------------------------------------#
     #   获得图片路径和标签
     #----------------------------------------------------#
@@ -127,17 +128,18 @@ if __name__ == "__main__":
     Epoch = 150
 
     gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
-
+    radam = tfa.optimizers.RectifiedAdam(learning_rate=Lr,
+                                         total_steps=150000,
+                                         weight_decay=1e-4,
+                                         warmup_proportion=0.1,
+                                         min_lr=Lr * 1e-3)
+    ranger = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
     model.compile(
         loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
         loss_weights=[2, 5, 2],
-        optimizer=tfa.optimizers.RectifiedAdam(learning_rate=Lr,
-                                               total_steps=600000,
-                                               weight_decay=1e-4,
-                                               warmup_proportion=0.1,
-                                               min_lr=Lr * 1e-2))
+        optimizer=ranger)
 
-    history = model.fit(gen.generate(True),
+    model.fit(gen.generate(True),
                         steps_per_epoch=num_train//Batch_size,
                         validation_data=gen.generate(False),
                         validation_steps=num_val//Batch_size,
@@ -145,3 +147,11 @@ if __name__ == "__main__":
                         verbose=1,
                         initial_epoch=Init_Epoch,
                         callbacks=[logging, checkpoint])
+
+
+
+
+
+
+
+

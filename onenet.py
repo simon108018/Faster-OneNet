@@ -8,6 +8,8 @@ import tensorflow as tf
 from PIL import Image, ImageDraw, ImageFont
 from tensorflow.keras import backend as K
 from tensorflow.keras.layers import Input
+import time
+
 
 from nets.onenet import onenet
 from utils.utils import onenet_correct_boxes, letterbox_image, nms
@@ -29,7 +31,7 @@ def preprocess_image(image):
 class OneNet(object):
     _defaults = {
         # "model_path"        : 'model_data/onenet_resnet50_voc.h5',
-        'model_path': 'model_data/onenet_resnet18.h5',
+        'model_path': 'model_data/ep087-loss2.442-val_loss2.396.h5',
         # "classes_path"      : 'model_data/voc_classes.txt',
         "classes_path": 'model_data/coco_classes.txt',
         "backbone": 'resnet18',
@@ -97,7 +99,10 @@ class OneNet(object):
 
     @tf.function
     def get_pred(self, photo):
+        start = time.time()
         preds = self.onenet(photo, training=False)
+        end = time.time()
+        print(end - start)
         return preds
 
     # ---------------------------------------------------#
