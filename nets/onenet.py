@@ -139,26 +139,22 @@ def onenet(input_shape, num_classes, backbone='resnet50', max_objects=100, mode=
     #        or  512                                               -> 128, 128, 64 -> 128, 128, 2
     #                                                              -> 128, 128, 64 -> 128, 128, 2
     #--------------------------------------------------------------------------------------------------------#
-    y1, y2 = onenet_head(C5, num_classes, prior_prob)
-    # if mode=="train":
-    #     l1, l2, l3 = Lambda(loss, name='loss')([y1, y2, cls_input, loc_input, reg_mask_input])
-    #     cls_loss_ = Lambda(cls, name='cls')([l1])
-    #     loc_loss_ = Lambda(loc, name='loc')([l2])
-    #     giou_loss_ = Lambda(giou, name='giou')([l3])
-    #     model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input], outputs=[cls_loss_, loc_loss_, giou_loss_])
-    #     return model
+    cls, loc, loc_dir = onenet_head(C5, num_classes, prior_prob)
+
     if mode == "train":
-        matcher = MinCostMatcher(alpha, gamma, name='min_cost_matcher')([y1, y2, cls_input, loc_input, reg_mask_input])
-        cls_cost = Focal_loss(alpha, gamma, name='cls')([y1, cls_input, reg_mask_input, matcher])
-        reg_cost = Loc_loss(name='loc')([y2, loc_input, reg_mask_input, matcher])
-        giou_cost = Giou_loss(name='giou')([y2, loc_input, reg_mask_input, matcher])
+        # label assignment
+        matcher = MinCostMatcher(alpha, gamma, name='min_cost_matcher')([cls, loc_dir, cls_input, loc_input, reg_mask_input])
+        # training loss
+        cls_cost = Focal_loss(alpha, gamma, name='cls')([cls, cls_input, reg_mask_input, matcher])
+        reg_cost = Loc_loss(name='loc')([loc_dir, loc_input, reg_mask_input, matcher])
+        giou_cost = Giou_loss(name='giou')([loc_dir, loc_input, reg_mask_input, matcher])
         model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input], outputs=[cls_cost, reg_cost, giou_cost])
         return model
     elif mode == "only_output":
-        prediction_model = Model(inputs=image_input, outputs=[y1, y2])
+        prediction_model = Model(inputs=image_input, outputs=[cls, loc])
         return prediction_model
     else:
         detections = Lambda(lambda x: decode(*x, max_objects=max_objects,
-                                            num_classes=num_classes))([y1, y2])
+                                            num_classes=num_classes))([loc, loc_dir])
         prediction_model = Model(inputs=image_input, outputs=detections)
         return prediction_model

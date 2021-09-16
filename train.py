@@ -11,9 +11,9 @@ from utils.utils import ModelCheckpoint
 from nets.onenet_generator import Generator
 from nets.onenet import onenet
 
-gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
-for gpu in gpus:
-    tf.config.experimental.set_memory_growth(gpu, True)
+gpus = tf.config.experimental.list_physical_devices(device_type='CPU')
+# for gpu in gpus:
+#     tf.config.experimental.set_memory_growth(gpu, True)
 
 
 def new_log(logdir):
@@ -116,28 +116,34 @@ if __name__ == "__main__":
         logs = "logs18/" + datetime.now().strftime("%Y%m%d-%H%M%S")
         logging = TensorBoard(log_dir=logs, profile_batch=2, histogram_freq=1)
         checkpoint = ModelCheckpoint('logs18/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
-                                     monitor='val_loss', save_weights_only=False, save_best_only=False, period=1)
+                                     monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
     else:
         logging = TensorBoard(log_dir="logs")
         checkpoint = ModelCheckpoint('logs/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
 
-    Lr = 5e-4
-    Batch_size = 10
-    Init_Epoch = 0
+    Batch_size = 32
+    Init_Epoch = 36
     Epoch = 150
-
+    step_num_per_epoch = num_train // Batch_size
+    step = tf.Variable(num_train//Batch_size * Init_Epoch, trainable=False)
+    schedule = tf.optimizers.schedules.PiecewiseConstantDecay(
+        [115*step_num_per_epoch, 140*step_num_per_epoch], [1e-0, 1e-1, 1e-2])
+    # lr and wd can be a function or a tensor
+    lr = 5e-4 * schedule(step)
+    wd = lambda: 1e-4 * schedule(step)
+    optimizer = tfa.optimizers.AdamW(learning_rate=lr, weight_decay=wd)
     gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
-    radam = tfa.optimizers.RectifiedAdam(learning_rate=Lr,
-                                         total_steps=150000,
-                                         weight_decay=1e-4,
-                                         warmup_proportion=0.1,
-                                         min_lr=Lr * 1e-3)
-    ranger = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
+    # radam = tfa.optimizers.RectifiedAdam(learning_rate=Lr,
+    #                                      total_steps=150000,
+    #                                      weight_decay=1e-4,
+    #                                      warmup_proportion=0.1,
+    #                                      min_lr=Lr * 1e-3)
+    # ranger = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
     model.compile(
         loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
         loss_weights=[2, 5, 2],
-        optimizer=ranger)
+        optimizer=optimizer)
 
     model.fit(gen.generate(True),
                         steps_per_epoch=num_train//Batch_size,

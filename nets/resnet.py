@@ -163,14 +163,14 @@ def onenet_head(x, num_classes, prior_prob):
     y1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(x)
     y1 = BatchNormalization()(y1)
     y1 = Activation('relu')(y1)
-    y1 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+    cls = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
                 bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid')(y1)
 
     # loc header (128*128*4)
     y2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(x)
     y2 = BatchNormalization()(y2)
     y2 = Activation('relu')(y2)
-    y2 = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu')(y2)
-    y2 = apply_ltrb(name='pred_location')(y2)
+    loc = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu')(y2)
+    loc_dir = apply_ltrb(name='pred_location')(loc)
 
-    return y1, y2
+    return cls, loc, loc_dir
