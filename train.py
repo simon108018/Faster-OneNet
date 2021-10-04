@@ -46,13 +46,13 @@ if __name__ == "__main__":
     #-----------------------------#
     #   图片的大小
     #-----------------------------#
-    input_shape = [416, 416, 3]
+    input_shape = [512, 512, 3]
     #-----------------------------#
     #   训练前一定要注意修改
     #   classes_path对应的txt的内容
     #   修改成自己需要分的类
     #-----------------------------#
-    classes_path = 'model_data/coco_classes.txt'
+    classes_path = 'model_data/voc_classes.txt'
     #----------------------------------------------------#
     #   获取classes和数量
     #----------------------------------------------------#
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     #   resnet18
     #   resnet50
     #-----------------------------#
-    backbone = "resnet18"
+    backbone = "resnet50"
 
     #----------------------------------------------------#
     #   获取onenet模型
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
     if backbone == "resnet50":
-        path = './logs50'
+        path = './logs_mymodel'
     elif backbone == "resnet18":
         path = './logs18'
 
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     #----------------------------------------------------#
     #   获得图片路径和标签
     #----------------------------------------------------#
-    annotation_path = '2007_train.txt'
+    annotation_path = '2012_train.txt'
     #----------------------------------------------------------------------#
     #   验证集的划分在train.py代码里面进行
     #   2007_test.txt和2007_val.txt里面没有内容是正常的。训练不会使用到。
@@ -109,8 +109,8 @@ if __name__ == "__main__":
     #   early_stopping用于设定早停，val_loss多次不下降自动结束训练，表示模型基本收敛
     #-------------------------------------------------------------------------------#
     if backbone == "resnet50":
-        logging = TensorBoard(log_dir="logs50")
-        checkpoint = ModelCheckpoint('logs50/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
+        logging = TensorBoard(log_dir="logs_mymodel")
+        checkpoint = ModelCheckpoint('logs_mymodel/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
     elif backbone == "resnet18":
         logs = "logs18/" + datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -122,27 +122,30 @@ if __name__ == "__main__":
         checkpoint = ModelCheckpoint('logs/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
 
-    Batch_size = 32
-    Init_Epoch = 36
-    Epoch = 150
-    step_num_per_epoch = num_train // Batch_size
-    step = tf.Variable(num_train//Batch_size * Init_Epoch, trainable=False)
-    schedule = tf.optimizers.schedules.PiecewiseConstantDecay(
-        [115*step_num_per_epoch, 140*step_num_per_epoch], [1e-0, 1e-1, 1e-2])
-    # lr and wd can be a function or a tensor
-    lr = 5e-4 * schedule(step)
-    wd = lambda: 1e-4 * schedule(step)
-    optimizer = tfa.optimizers.AdamW(learning_rate=lr, weight_decay=wd)
+    Lr = 5e-5
+    Batch_size = 6
+    Init_Epoch = 92
+    Epoch = 500
+    # step_num_per_epoch = num_train // Batch_size
+    # step = tf.Variable(num_train//Batch_size * Init_Epoch, trainable=False)
+    # schedule = tf.optimizers.schedules.PiecewiseConstantDecay(
+    #     [115*step_num_per_epoch, 140*step_num_per_epoch], [1e-0, 1e-1, 1e-2])
+    # # lr and wd can be a function or a tensor
+    # Lr = 5e-4 * schedule(step)
+    # wd = lambda: 1e-4 * schedule(step)
+    # optimizer = tfa.optimizers.AdamW(learning_rate=Lr, weight_decay=wd)
     gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
-    # radam = tfa.optimizers.RectifiedAdam(learning_rate=Lr,
-    #                                      total_steps=150000,
-    #                                      weight_decay=1e-4,
-    #                                      warmup_proportion=0.1,
-    #                                      min_lr=Lr * 1e-3)
-    # ranger = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
+    optimizer = tfa.optimizers.RectifiedAdam(learning_rate=Lr,
+                                             total_steps=num_train//Batch_size * (Epoch - Init_Epoch),
+                                             warmup_proportion=0.,
+                                             weight_decay=1e-4,
+                                             min_lr=Lr*1e-2)
+
     model.compile(
-        loss={'cls': lambda y_true, y_pred: y_pred, 'loc': lambda y_true, y_pred: y_pred, 'giou': lambda y_true, y_pred: y_pred},
-        loss_weights=[2, 5, 2],
+        loss={'cls1': lambda y_true, y_pred: y_pred, 'loc1': lambda y_true, y_pred: y_pred, 'giou1': lambda y_true, y_pred: y_pred,
+              'cls2': lambda y_true, y_pred: y_pred, 'loc2': lambda y_true, y_pred: y_pred, 'giou2': lambda y_true, y_pred: y_pred,
+              'cls3': lambda y_true, y_pred: y_pred, 'loc3': lambda y_true, y_pred: y_pred, 'giou3': lambda y_true, y_pred: y_pred},
+        loss_weights=[2, 5, 2, 2, 5, 2, 2, 5, 2],
         optimizer=optimizer)
 
     model.fit(gen.generate(True),
@@ -153,11 +156,3 @@ if __name__ == "__main__":
                         verbose=1,
                         initial_epoch=Init_Epoch,
                         callbacks=[logging, checkpoint])
-
-
-
-
-
-
-
-

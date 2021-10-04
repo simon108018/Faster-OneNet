@@ -67,6 +67,88 @@ def ResNet50(image_input=tf.keras.Input(shape=(512, 512, 3))):
     x = [o, o1, o2, o3]
     return x
 
+def SSD_OneNet(x, num_classes, prior_prob):
+    o1, o2, o3, o4 = x
+    #  16, 16, 2048 >> 8, 8, 256
+    x = Conv2D(128, kernel_size=(1, 1), activation='relu',
+               padding='same',
+               name='stage5_a')(o4)
+    o5 = Conv2D(256, kernel_size=(3,3), strides=(2, 2),
+                                   activation='relu', padding='same',
+                                   name='stage5_b')(x)
+
+
+    # o1
+    x = Conv2D(64, kernel_size=(3, 3), strides=(1, 1),
+               use_bias=False, padding='same',
+               kernel_initializer='he_normal',
+               kernel_regularizer=l2(5e-4))(o1)
+    x = BatchNormalization()(x)
+    y1 = Activation('relu')(x)
+
+    # o3
+    x = Conv2D(64, kernel_size=(3,3), strides=(1, 1),
+               use_bias=False, padding='same',
+               kernel_initializer='he_normal',
+               kernel_regularizer=l2(5e-4))(o3)
+    x = BatchNormalization()(x)
+    y2 = Activation('relu')(x)
+
+    # o5
+    x = Conv2D(64, kernel_size=(3,3), strides=(1, 1),
+               use_bias=False, padding='same',
+               kernel_initializer='he_normal',
+               kernel_regularizer=l2(5e-4))(o5)
+    x = BatchNormalization()(x)
+    y3 = Activation('relu')(x)
+
+    bias_value = -np.log((1 - prior_prob) / prior_prob)
+
+    ## o1
+    z1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y1)
+    z1 = BatchNormalization()(z1)
+    z1 = Activation('relu')(z1)
+    cls1 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+                bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid')(z1)
+
+    # loc header (128*128*4)
+    z2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y1)
+    z2 = BatchNormalization()(z2)
+    z2 = Activation('relu')(z2)
+    loc1 = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu')(z2)
+    loc_dir1 = apply_ltrb(name='pred_location1')(loc1)
+
+    ## o3
+    z1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y2)
+    z1 = BatchNormalization()(z1)
+    z1 = Activation('relu')(z1)
+    cls2 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+                bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid')(z1)
+
+    # loc header (128*128*4)
+    z2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y2)
+    z2 = BatchNormalization()(z2)
+    z2 = Activation('relu')(z2)
+    loc2 = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu')(z2)
+    loc_dir2 = apply_ltrb(name='pred_location2')(loc2)
+
+    ## o5
+    z1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y3)
+    z1 = BatchNormalization()(z1)
+    z1 = Activation('relu')(z1)
+    cls3 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+                bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid')(z1)
+
+    # loc header (128*128*4)
+    z2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y3)
+    z2 = BatchNormalization()(z2)
+    z2 = Activation('relu')(z2)
+    loc3 = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu')(z2)
+    loc_dir3 = apply_ltrb(name='pred_location3')(loc3)
+
+    return [cls1, loc1, loc_dir1, cls2, loc2, loc_dir2, cls3, loc3, loc_dir3]
+
+
 
 def BasicBlock(input_tensor, kernel_size, filters, stage, block, strides=(1, 1)):
 

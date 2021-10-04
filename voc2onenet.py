@@ -15,8 +15,18 @@ import random
 
 random.seed(0)
 
-xmlfilepath = r'./VOCdevkit/VOC2007/Annotations'
-saveBasePath = r"./VOCdevkit/VOC2007/ImageSets/Main/"
+dataname = 'voc2012'
+
+if dataname == 'voc2007':
+    xmlfilepath = r'./VOCdevkit/VOC2007/Annotations'
+    saveBasePath = r"./VOCdevkit/VOC2007/ImageSets/Main/"
+elif dataname == 'voc2012':
+    xmlfilepath = r'./VOCdevkit/VOC2012/Annotations'
+    saveBasePath = r"./VOCdevkit/VOC2012/ImageSets/Main/"
+else:
+    xmlfilepath = r'./VOCdevkit/coco/Annotations'
+    saveBasePath = r"./VOCdevkit/coco/ImageSets/Main/"
+
 
 # ----------------------------------------------------------------------#
 #   想要增加测试集修改trainval_percent

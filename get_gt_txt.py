@@ -8,6 +8,8 @@ import os
 import glob
 import xml.etree.ElementTree as ET
 
+dataname = 'voc2012'
+
 '''
 ！！！！！！！！！！！！！注意事项！！！！！！！！！！！！！
 # 这一部分是当xml有无关的类的时候，下方有代码可以进行筛选！
@@ -22,16 +24,25 @@ def get_classes(classes_path):
     class_names = [c.strip() for c in class_names]
     return class_names
 
-image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/train.txt').read().strip().split()
+if dataname == 'voc2007':
+    image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/train.txt').read().strip().split()
+    annotationspath = "VOCdevkit/VOC2007/Annotations/"
+elif dataname == 'voc2012':
+    image_ids = open('VOCdevkit/VOC2012/ImageSets/Main/train.txt').read().strip().split()
+    annotationspath = "VOCdevkit/VOC2012/Annotations/"
+else:
+    image_ids = open('VOCdevkit/coco/ImageSets/Main/train.txt').read().strip().split()
+    annotationspath = "VOCdevkit/coco/Annotations/"
 
 if not os.path.exists("./input"):
     os.makedirs("./input")
 if not os.path.exists("./input/ground-truth"):
     os.makedirs("./input/ground-truth")
 
+
 for image_id in image_ids:
     with open("./input/ground-truth/"+image_id+".txt", "w") as new_f:
-        root = ET.parse("VOCdevkit/VOC2007/Annotations/"+image_id+".xml").getroot()
+        root = ET.parse(annotationspath+image_id+".xml").getroot()
         for obj in root.findall('object'):
             difficult_flag = False
             if obj.find('difficult')!=None:

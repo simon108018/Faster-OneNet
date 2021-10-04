@@ -8,7 +8,7 @@ from tensorflow.keras.regularizers import l2
 
 # from nets.onenet_loss import loss, cls, loc, giou
 from nets.onenet_loss import MinCostMatcher, Focal_loss, Giou_loss, Loc_loss
-from nets.resnet import ResNet18, ResNet50, onenet_head
+from nets.resnet import ResNet18, ResNet50, onenet_head, SSD_OneNet
 
 
 def nms(heat, kernel=3):
@@ -109,7 +109,6 @@ def decode(cls_pred, loc_pred, max_objects=100, num_classes=20):
 
 def onenet(input_shape, num_classes, backbone='resnet50', max_objects=100, mode="train", prior_prob=0.01, alpha=0.25, gamma=2.0, num_stacks=2):
     assert backbone in ['resnet18', 'resnet50']
-    output_size = input_shape[0] // 4
     image_input = Input(shape=input_shape, name="image_input")
     cls_input = Input(shape=(max_objects, num_classes), name='cls_input')
     loc_input = Input(shape=(max_objects, 4), name='loc_input')
@@ -139,22 +138,31 @@ def onenet(input_shape, num_classes, backbone='resnet50', max_objects=100, mode=
     #        or  512                                               -> 128, 128, 64 -> 128, 128, 2
     #                                                              -> 128, 128, 64 -> 128, 128, 2
     #--------------------------------------------------------------------------------------------------------#
-    cls, loc, loc_dir = onenet_head(C5, num_classes, prior_prob)
+    cls1, loc1, loc_dir1, cls2, loc2, loc_dir2, cls3, loc3, loc_dir3 = SSD_OneNet(C5, num_classes, prior_prob)
 
     if mode == "train":
         # label assignment
-        matcher = MinCostMatcher(alpha, gamma, name='min_cost_matcher')([cls, loc_dir, cls_input, loc_input, reg_mask_input])
+        matcher1 = MinCostMatcher(alpha, gamma, name='min_cost_matcher1')([cls1, loc_dir1, cls_input, loc_input, reg_mask_input])
+        matcher2 = MinCostMatcher(alpha, gamma, name='min_cost_matcher2')([cls2, loc_dir2, cls_input, loc_input, reg_mask_input])
+        matcher3 = MinCostMatcher(alpha, gamma, name='min_cost_matcher3')([cls3, loc_dir3, cls_input, loc_input, reg_mask_input])
         # training loss
-        cls_cost = Focal_loss(alpha, gamma, name='cls')([cls, cls_input, reg_mask_input, matcher])
-        reg_cost = Loc_loss(name='loc')([loc_dir, loc_input, reg_mask_input, matcher])
-        giou_cost = Giou_loss(name='giou')([loc_dir, loc_input, reg_mask_input, matcher])
-        model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input], outputs=[cls_cost, reg_cost, giou_cost])
+        cls_cost1 = Focal_loss(alpha, gamma, name='cls1')([cls1, cls_input, reg_mask_input, matcher1])
+        reg_cost1 = Loc_loss(name='loc1')([loc_dir1, loc_input, reg_mask_input, matcher1])
+        giou_cost1 = Giou_loss(name='giou1')([loc_dir1, loc_input, reg_mask_input, matcher1])
+        cls_cost2 = Focal_loss(alpha, gamma, name='cls2')([cls2, cls_input, reg_mask_input, matcher2])
+        reg_cost2= Loc_loss(name='loc2')([loc_dir2, loc_input, reg_mask_input, matcher2])
+        giou_cost2 = Giou_loss(name='giou2')([loc_dir2, loc_input, reg_mask_input, matcher2])
+        cls_cost3 = Focal_loss(alpha, gamma, name='cls3')([cls3, cls_input, reg_mask_input, matcher3])
+        reg_cost3 = Loc_loss(name='loc3')([loc_dir3, loc_input, reg_mask_input, matcher3])
+        giou_cost3 = Giou_loss(name='giou3')([loc_dir3, loc_input, reg_mask_input, matcher3])
+        model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input],
+                      outputs=[cls_cost1, reg_cost1, giou_cost1, cls_cost2, reg_cost2, giou_cost2,cls_cost3, reg_cost3, giou_cost3])
         return model
     elif mode == "only_output":
-        prediction_model = Model(inputs=image_input, outputs=[cls, loc])
+        prediction_model = Model(inputs=image_input, outputs=[cls1, loc1, cls2, loc2, cls3, loc3])
         return prediction_model
     else:
         detections = Lambda(lambda x: decode(*x, max_objects=max_objects,
-                                            num_classes=num_classes))([loc, loc_dir])
+                                            num_classes=num_classes))([loc1, loc_dir1, loc2, loc_dir2, loc3, loc_dir3])
         prediction_model = Model(inputs=image_input, outputs=detections)
         return prediction_model

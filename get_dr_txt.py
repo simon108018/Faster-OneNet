@@ -32,6 +32,7 @@ for gpu in gpus:
 可能有些同学知道有0.5和0.5:0.95的mAP，这里的self.nms_threhold=0.5不代表mAP0.5。
 如果想要设定mAP0.x，比如设定mAP0.75，可以去get_map.py设定MINOVERLAP。
 '''
+dataname = 'voc2012'
 
 
 def preprocess_image(image):
@@ -62,7 +63,7 @@ class mAP_OneNet(OneNet):
         # -----------------------------------------------------------#
         photo = np.reshape(preprocess_image(photo), [1, self.input_shape[0], self.input_shape[1], self.input_shape[2]])
 
-        preds = self.get_pred(photo).numpy()
+        preds = self.get_pred(photo)
         # -------------------------------------------------------#
         #   对于onenet网络来讲，确立中心非常重要。
         #   对于大目标而言，会存在许多的局部信息。
@@ -113,7 +114,12 @@ class mAP_OneNet(OneNet):
 
 
 onenet = mAP_OneNet()
-image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/train.txt').read().strip().split()
+if dataname == 'voc2007':
+    image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/train.txt').read().strip().split()
+elif dataname == 'voc2012':
+    image_ids = open('VOCdevkit/VOC2012/ImageSets/Main/train.txt').read().strip().split()
+else:
+    image_ids = open('VOCdevkit/coco/ImageSets/Main/train.txt').read().strip().split()
 
 if not os.path.exists("./input"):
     os.makedirs("./input")
@@ -122,10 +128,22 @@ if not os.path.exists("./input/detection-results"):
 if not os.path.exists("./input/images-optional"):
     os.makedirs("./input/images-optional")
 print(image_ids)
-for image_id in tqdm(image_ids):
-    image_path = "./VOCdevkit/VOC2007/JPEGImages/" + image_id + ".jpg"
-    image = Image.open(image_path)
-    image.save("./input/images-optional/" + image_id + ".jpg")
-    onenet.detect_image(image_id, image)
-
+if dataname == 'voc2007':
+    for image_id in tqdm(image_ids):
+        image_path = "./VOCdevkit/VOC2007/JPEGImages/" + image_id + ".jpg"
+        image = Image.open(image_path)
+        image.save("./input/images-optional/" + image_id + ".jpg")
+        onenet.detect_image(image_id, image)
+elif dataname == 'voc2012':
+    for image_id in tqdm(image_ids):
+        image_path = "./VOCdevkit/VOC2012/JPEGImages/" + image_id + ".jpg"
+        image = Image.open(image_path)
+        image.save("./input/images-optional/" + image_id + ".jpg")
+        onenet.detect_image(image_id, image)
+else:
+    for image_id in tqdm(image_ids):
+        image_path = "./VOCdevkit/coco/JPEGImages/" + image_id + ".jpg"
+        image = Image.open(image_path)
+        image.save("./input/images-optional/" + image_id + ".jpg")
+        onenet.detect_image(image_id, image)
 print("Conversion completed!")
