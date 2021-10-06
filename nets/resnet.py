@@ -63,8 +63,8 @@ def ResNet50(image_input=tf.keras.Input(shape=(512, 512, 3))):
     #  32, 32, 1024
     o3 = model.get_layer('conv4_block6_out').output
     #  16, 16, 2048
-    o = model.get_layer('conv5_block3_out').output
-    x = [o, o1, o2, o3]
+    o4 = model.get_layer('conv5_block3_out').output
+    x = [o1, o2, o3, o4]
     return x
 
 def SSD_OneNet(x, num_classes, prior_prob):
@@ -76,7 +76,6 @@ def SSD_OneNet(x, num_classes, prior_prob):
     o5 = Conv2D(256, kernel_size=(3,3), strides=(2, 2),
                                    activation='relu', padding='same',
                                    name='stage5_b')(x)
-
 
     # o1
     x = Conv2D(64, kernel_size=(3, 3), strides=(1, 1),
@@ -125,7 +124,7 @@ def SSD_OneNet(x, num_classes, prior_prob):
     cls2 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
                 bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid')(z1)
 
-    # loc header (128*128*4)
+    # loc header (32*32*4)
     z2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y2)
     z2 = BatchNormalization()(z2)
     z2 = Activation('relu')(z2)
@@ -139,7 +138,7 @@ def SSD_OneNet(x, num_classes, prior_prob):
     cls3 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
                 bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid')(z1)
 
-    # loc header (128*128*4)
+    # loc header (8*8*4)
     z2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y3)
     z2 = BatchNormalization()(z2)
     z2 = Activation('relu')(z2)

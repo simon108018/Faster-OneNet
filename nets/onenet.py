@@ -156,7 +156,7 @@ def onenet(input_shape, num_classes, backbone='resnet50', max_objects=100, mode=
         reg_cost3 = Loc_loss(name='loc3')([loc_dir3, loc_input, reg_mask_input, matcher3])
         giou_cost3 = Giou_loss(name='giou3')([loc_dir3, loc_input, reg_mask_input, matcher3])
         model = Model(inputs=[image_input, cls_input, loc_input, reg_mask_input],
-                      outputs=[cls_cost1, reg_cost1, giou_cost1, cls_cost2, reg_cost2, giou_cost2,cls_cost3, reg_cost3, giou_cost3])
+                      outputs=[cls_cost1, reg_cost1, giou_cost1, cls_cost2, reg_cost2, giou_cost2, cls_cost3, reg_cost3, giou_cost3])
         return model
     elif mode == "only_output":
         prediction_model = Model(inputs=image_input, outputs=[cls1, loc1, cls2, loc2, cls3, loc3])

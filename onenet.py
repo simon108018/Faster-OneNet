@@ -37,17 +37,18 @@ def preprocess_image(image):
 class OneNet(object):
     _defaults = {
         # "model_path": './logs18/tflite/model.tflite',
-        "model_path": 'model_data/ep450-loss1.599-val_loss1.698.h5',
+        "model_path": 'model_data/mymodel_weights.h5',
         "classes_path": 'model_data/voc_classes.txt',
-        "backbone": 'resnet18',
+        "backbone": 'resnet50',
         "input_shape": [512, 512, 3],
-        "confidence": 0.2,
+        "confidence": 0.001,
+        "mode": 3,
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
         # 也可以根据检测效果自行选择
         "nms": True,
         "nms_threhold": 0.4,
-        "use_quantization": True,
+        "use_quantization": False,
     }
 
 
@@ -66,6 +67,11 @@ class OneNet(object):
     def __init__(self, **kwargs):
         self.__dict__.update(self._defaults)
         self.class_names = self._get_class()
+        self.mode = str(self.mode)
+        self.pred_scale = {}
+        for i in range(1,4):
+            if str(i) in self.mode:
+                self.pred_scale['detections{}'.format(i)] = 4**i
         self.generate()
 
     # ---------------------------------------------------#
@@ -186,32 +192,40 @@ class OneNet(object):
         return locations
 
 
-
-    def decode(self, cls_pred, loc_pred, max_objects=100):
+    def decode_sub(self, cls_pred, loc_pred, max_objects=100):
         scores, indices, class_ids, xs, ys = self.topk(cls_pred, max_objects=max_objects)
         b = cls_pred.shape[0]
-
         loc_pred = loc_pred.reshape([b, -1, 4])
         topk_loc = np.take_along_axis(loc_pred, np.expand_dims(indices, axis=-1), axis=1)
-
-
         topk_x1, topk_y1 = topk_loc[..., 0:1], topk_loc[..., 1:2]
         topk_x2, topk_y2 = topk_loc[..., 2:3], topk_loc[..., 3:4]
-
         scores = np.expand_dims(scores, axis=-1)
-
         class_ids = np.expand_dims(class_ids, axis=-1).astype('float32')
-
         # -----------------------------------------------------#
         #   detections  预测框所有参数的堆叠
         #   前四个是预测框的坐标，后两个是预测框的得分与种类
         # -----------------------------------------------------#
         detections = np.concatenate([topk_x1, topk_y1, topk_x2, topk_y2, scores, class_ids], axis=-1)
+        return detections
 
+
+    def decode(self, cls1_pred, loc1_pred, cls2_pred, loc2_pred, cls3_pred, loc3_pred, max_objects=100):
+        detections = {}
+        if '1' in self.mode:
+            detections['detections1'] = self.decode_sub(cls1_pred, loc1_pred, max_objects=max_objects)
+        if '2' in self.mode:
+            detections['detections2'] = self.decode_sub(cls2_pred, loc2_pred, max_objects=max_objects)
+        if '3' in self.mode:
+            detections['detections3'] = self.decode_sub(cls3_pred, loc3_pred, max_objects=max_objects)
         return detections
 
 
     def get_pred(self, photo):
+        # mode
+        # 123 --> predict all result
+        # 1 --> only output first prediction
+        # 12 --> output first & second prediction
+        # 2 --> only output second prediction
         if self.use_quantization:
             if self.input_details['dtype'] == np.uint8:
                 input_scale, input_zero_point = self.input_details["quantization"]
@@ -229,10 +243,15 @@ class OneNet(object):
             return preds
         else:
             # start = time.time()
-            cls_pred, loc_pred = self.onenet(photo, training=False)
+            cls1_pred, loc1_pred, cls2_pred, loc2_pred, cls3_pred, loc3_pred = self.onenet(photo, training=False)
             # end = time.time()
-            loc_pred = self.get_directly_loc(loc_pred.numpy())
-            preds = self.decode(cls_pred.numpy(), loc_pred, max_objects=100)
+            loc1_pred = self.get_directly_loc(loc1_pred.numpy())
+            loc2_pred = self.get_directly_loc(loc2_pred.numpy())
+            loc3_pred = self.get_directly_loc(loc3_pred.numpy())
+            preds = self.decode(cls1_pred.numpy(), loc1_pred,
+                                cls2_pred.numpy(), loc2_pred,
+                                cls3_pred.numpy(), loc3_pred,
+                                max_objects=100)
             # print('預測時花費了{:.2f}秒'.format(end - start))
             return preds
 
@@ -264,20 +283,32 @@ class OneNet(object):
         #   实际测试中，hourglass为主干网络时有无额外的nms相差不大，resnet相差较大。
         # -------------------------------------------------------#
         if self.nms:
-            preds = np.array(nms(preds, self.nms_threhold))
-
-        if len(preds[0]) <= 0:
+            for k in preds.keys():
+                preds[k] = np.array(nms(preds[k], self.nms_threhold))
+        pred_num = 0
+        for pred in preds:
+            pred_num += len(pred[0])
+        if pred_num <= 0:
             return image
 
         # -----------------------------------------------------------#
         #   将预测结果转换成小数的形式
         # -----------------------------------------------------------#
-        print(len(preds[0]))
-        preds[0][:, 0:4] = preds[0][:, 0:4] / (self.input_shape[0] / 4)
-
-        det_label = preds[0][:, -1]
-        det_conf = preds[0][:, -2]
-        det_xmin, det_ymin, det_xmax, det_ymax = preds[0][:, 0], preds[0][:, 1], preds[0][:, 2], preds[0][:, 3]
+        firstIteration = True
+        for k in self.pred_scale.keys():
+            print(k)
+            preds[k][0][:, 0:4] = preds[k][0][:, 0:4] / (self.input_shape[0] / self.pred_scale[k])
+            if firstIteration:
+                det_label = preds[k][0][:, -1]
+                det_conf = preds[k][0][:, -2]
+                det_xmin, det_ymin, det_xmax, det_ymax = preds[k][0][:, 0], preds[k][0][:, 1], preds[k][0][:, 2], preds[k][0][:, 3]
+                firstIteration = False
+            det_label = np.concatenate([det_label , preds[k][0][:, -1] ])
+            det_conf = np.concatenate([det_conf , preds[k][0][:, -2] ])
+            det_xmin = np.concatenate([det_xmin, preds[k][0][:, 0]])
+            det_ymin = np.concatenate([det_ymin, preds[k][0][:, 1]])
+            det_xmax = np.concatenate([det_xmax, preds[k][0][:, 2]])
+            det_ymax = np.concatenate([det_ymax, preds[k][0][:, 3]])
         # -----------------------------------------------------------#
         #   筛选出其中得分高于confidence的框
         # -----------------------------------------------------------#
