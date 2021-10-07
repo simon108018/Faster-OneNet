@@ -60,17 +60,17 @@ def onenet(input_shape, num_classes, backbone='resnet50', max_objects=100, mode=
                       outputs=[cls_cost1, reg_cost1, giou_cost1, cls_cost2, reg_cost2, giou_cost2, cls_cost3, reg_cost3, giou_cost3])
         return model
     else:
-        if "1" in mode and "23" not in mode:
+        if "1" in mode and "2" not in mode and "3" not in mode:
             prediction_model = Model(inputs=image_input, outputs=[cls1, loc1])
         elif "2" in mode and "1" not in mode and "3" not in mode:
             prediction_model = Model(inputs=image_input, outputs=[cls2, loc2])
-        elif "3" in mode and "12" not in mode:
+        elif "3" in mode and "1" not in mode and "2" not in mode:
             prediction_model = Model(inputs=image_input, outputs=[cls3, loc3])
-        elif "12" in mode and "3" not in mode:
+        elif "1" in mode and "2" in mode and "3" not in mode:
             prediction_model = Model(inputs=image_input, outputs=[cls1, loc1, cls2, loc2])
-        elif "13" in mode and "2" not in mode:
+        elif "1" in mode and "3" in mode and "2" not in mode:
             prediction_model = Model(inputs=image_input, outputs=[cls1, loc1, cls3, loc3])
-        elif "23" in mode and "1" not in mode:
+        elif "2" in mode and "3" in mode and "1" not in mode:
             prediction_model = Model(inputs=image_input, outputs=[cls2, loc2, cls3, loc3])
         else:
             prediction_model = Model(inputs=image_input, outputs=[cls1, loc1, cls2, loc2, cls3, loc3])

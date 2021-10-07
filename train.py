@@ -11,9 +11,9 @@ from utils.utils import ModelCheckpoint
 from nets.onenet_generator import Generator
 from nets.onenet import onenet
 
-gpus = tf.config.experimental.list_physical_devices(device_type='CPU')
-# for gpu in gpus:
-#     tf.config.experimental.set_memory_growth(gpu, True)
+gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 
 def new_log(logdir):
@@ -122,9 +122,9 @@ if __name__ == "__main__":
         checkpoint = ModelCheckpoint('logs/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
 
-    Lr = 5e-3
+    Lr = 5e-4
     Batch_size = 12
-    Init_Epoch = 90
+    Init_Epoch = 0
     Epoch = 500
     # step_num_per_epoch = num_train // Batch_size
     # step = tf.Variable(num_train//Batch_size * Init_Epoch, trainable=False)

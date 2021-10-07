@@ -41,8 +41,8 @@ class OneNet(object):
         "classes_path": 'model_data/voc_classes.txt',
         "backbone": 'resnet50',
         "input_shape": [512, 512, 3],
-        "confidence": 0.2,
-        "mode": 3,
+        "confidence": 0.01,
+        "mode": 1, ## 請選擇輸出層，可輸入1、2、3、12、13、23或123。
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
         # 也可以根据检测效果自行选择
@@ -230,7 +230,6 @@ class OneNet(object):
             photo = photo.astype(self.input_details["dtype"])
             self.interpreter.set_tensor(self.input_details["index"], photo)
             self.interpreter.invoke()
-            print(self.output_details[1])
             output_cls = self.interpreter.get_tensor(self.output_details[0]["index"])
             output_loc = self.interpreter.get_tensor(self.output_details[1]["index"])
             output_loc = self.get_directly_loc(output_loc)
@@ -243,7 +242,8 @@ class OneNet(object):
             model_preds = self.onenet(photo, training=False)
             for i in range(len(model_preds)):
                 if (i % 2 == 1):
-                    model_preds[i] == self.get_directly_loc(model_preds[i].numpy())
+                    model_preds[i] = self.get_directly_loc(model_preds[i].numpy())
+
 
             # end = time.time()
 
@@ -293,13 +293,13 @@ class OneNet(object):
         # -----------------------------------------------------------#
         firstIteration = True
         for k in self.pred_scale.keys():
-            print(k)
             preds[k][0][:, 0:4] = preds[k][0][:, 0:4] / (self.input_shape[0] / self.pred_scale[k])
             if firstIteration:
                 det_label = preds[k][0][:, -1]
                 det_conf = preds[k][0][:, -2]
                 det_xmin, det_ymin, det_xmax, det_ymax = preds[k][0][:, 0], preds[k][0][:, 1], preds[k][0][:, 2], preds[k][0][:, 3]
                 firstIteration = False
+                continue
             det_label = np.concatenate([det_label , preds[k][0][:, -1] ])
             det_conf = np.concatenate([det_conf , preds[k][0][:, -2] ])
             det_xmin = np.concatenate([det_xmin, preds[k][0][:, 0]])
