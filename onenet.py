@@ -41,7 +41,7 @@ class OneNet(object):
         "classes_path": 'model_data/voc_classes.txt',
         "backbone": 'resnet50',
         "input_shape": [512, 512, 3],
-        "confidence": 0.001,
+        "confidence": 0.2,
         "mode": 3,
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
@@ -114,7 +114,7 @@ class OneNet(object):
             print('{} model, anchors, and classes loaded.'.format(self.model_path))
 
         else:
-            self.onenet = onenet(self.input_shape, num_classes=self.num_classes, backbone=self.backbone, mode='only_output')
+            self.onenet = onenet(self.input_shape, num_classes=self.num_classes, backbone=self.backbone, mode='only_output'+self.mode)
             self.onenet.load_weights(self.model_path, by_name=True, skip_mismatch=True)
             print('{} model, anchors, and classes loaded.'.format(self.model_path))
             if self.use_quantization:
@@ -209,14 +209,11 @@ class OneNet(object):
         return detections
 
 
-    def decode(self, cls1_pred, loc1_pred, cls2_pred, loc2_pred, cls3_pred, loc3_pred, max_objects=100):
+    def decode(self, model_pred, max_objects=100):
         detections = {}
-        if '1' in self.mode:
-            detections['detections1'] = self.decode_sub(cls1_pred, loc1_pred, max_objects=max_objects)
-        if '2' in self.mode:
-            detections['detections2'] = self.decode_sub(cls2_pred, loc2_pred, max_objects=max_objects)
-        if '3' in self.mode:
-            detections['detections3'] = self.decode_sub(cls3_pred, loc3_pred, max_objects=max_objects)
+        for i in range(len(self.mode)):
+            detections['detections{}'.format(self.mode[i])] = self.decode_sub(model_pred[2*i], model_pred[2*i+1], max_objects=max_objects)
+
         return detections
 
 
@@ -243,14 +240,14 @@ class OneNet(object):
             return preds
         else:
             # start = time.time()
-            cls1_pred, loc1_pred, cls2_pred, loc2_pred, cls3_pred, loc3_pred = self.onenet(photo, training=False)
+            model_preds = self.onenet(photo, training=False)
+            for i in range(len(model_preds)):
+                if (i % 2 == 1):
+                    model_preds[i] == self.get_directly_loc(model_preds[i].numpy())
+
             # end = time.time()
-            loc1_pred = self.get_directly_loc(loc1_pred.numpy())
-            loc2_pred = self.get_directly_loc(loc2_pred.numpy())
-            loc3_pred = self.get_directly_loc(loc3_pred.numpy())
-            preds = self.decode(cls1_pred.numpy(), loc1_pred,
-                                cls2_pred.numpy(), loc2_pred,
-                                cls3_pred.numpy(), loc3_pred,
+
+            preds = self.decode(model_preds,
                                 max_objects=100)
             # print('預測時花費了{:.2f}秒'.format(end - start))
             return preds

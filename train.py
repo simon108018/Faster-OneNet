@@ -123,8 +123,8 @@ if __name__ == "__main__":
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
 
     Lr = 5e-3
-    Batch_size = 6
-    Init_Epoch = .
+    Batch_size = 12
+    Init_Epoch = 90
     Epoch = 500
     # step_num_per_epoch = num_train // Batch_size
     # step = tf.Variable(num_train//Batch_size * Init_Epoch, trainable=False)
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
     optimizer = tfa.optimizers.RectifiedAdam(learning_rate=Lr,
                                              total_steps=num_train//Batch_size * (Epoch - Init_Epoch),
-                                             warmup_proportion=0.1,
+                                             warmup_proportion=0.,
                                              weight_decay=1e-4,
                                              min_lr=Lr*1e-2)
 

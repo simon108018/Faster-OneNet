@@ -15,9 +15,9 @@ from onenet import OneNet
 from PIL import Image
 import tensorflow as tf
 
-gpus = tf.config.experimental.list_physical_devices(device_type='CPU')
-# for gpu in gpus:
-#     tf.config.experimental.set_memory_growth(gpu, True)
+gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 onenet = OneNet()
 
