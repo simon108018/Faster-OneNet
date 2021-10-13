@@ -122,37 +122,30 @@ if __name__ == "__main__":
         checkpoint = ModelCheckpoint('logs/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
 
-    Lr = 5e-4
-    Batch_size = 12
+    Lr = 1e-4
+    Batch_size = 6
     Init_Epoch = 0
     Epoch = 500
-    # step_num_per_epoch = num_train // Batch_size
-    # step = tf.Variable(num_train//Batch_size * Init_Epoch, trainable=False)
-    # schedule = tf.optimizers.schedules.PiecewiseConstantDecay(
-    #     [115*step_num_per_epoch, 140*step_num_per_epoch], [1e-0, 1e-1, 1e-2])
-    # # lr and wd can be a function or a tensor
-    # Lr = 5e-4 * schedule(step)
-    # wd = lambda: 1e-4 * schedule(step)
-    # optimizer = tfa.optimizers.AdamW(learning_rate=Lr, weight_decay=wd)
+
     gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes)
     optimizer = tfa.optimizers.RectifiedAdam(learning_rate=Lr,
                                              total_steps=num_train//Batch_size * (Epoch - Init_Epoch),
                                              warmup_proportion=0.,
                                              weight_decay=1e-4,
-                                             min_lr=Lr*1e-2)
+                                             min_lr=Lr*5e-2)
 
     model.compile(
         loss={'cls1': lambda y_true, y_pred: y_pred, 'loc1': lambda y_true, y_pred: y_pred, 'giou1': lambda y_true, y_pred: y_pred,
               'cls2': lambda y_true, y_pred: y_pred, 'loc2': lambda y_true, y_pred: y_pred, 'giou2': lambda y_true, y_pred: y_pred,
               'cls3': lambda y_true, y_pred: y_pred, 'loc3': lambda y_true, y_pred: y_pred, 'giou3': lambda y_true, y_pred: y_pred},
-        loss_weights=[2, 5, 2, 2, 5, 2, 2, 5, 2],
+        loss_weights=[0.4, 0.5, 0.2, 0.2, 0.5, 0.2, 0.2, 0.5, 0.2],
         optimizer=optimizer)
 
     model.fit(gen.generate(True),
-                        steps_per_epoch=num_train//Batch_size,
-                        validation_data=gen.generate(False),
-                        validation_steps=num_val//Batch_size,
-                        epochs=Epoch,
-                        verbose=1,
-                        initial_epoch=Init_Epoch,
-                        callbacks=[logging, checkpoint])
+              steps_per_epoch=num_train//Batch_size,
+              validation_data=gen.generate(False),
+              validation_steps=num_val//Batch_size,
+              epochs=Epoch,
+              verbose=1,
+              initial_epoch=Init_Epoch,
+              callbacks=[logging, checkpoint])
