@@ -10,7 +10,7 @@ from tensorflow.keras.layers import (Layer, Activation, BatchNormalization, Conv
 
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras import initializers
-
+from tensorflow_addons.layers import GroupNormalization
 
 class apply_ltrb(Layer):
     def __init__(self, name=None, **kwargs):
@@ -58,94 +58,145 @@ def ResNet50(image_input=tf.keras.Input(shape=(512, 512, 3))):
 
     # 128,128,  256
     o1 = model.get_layer('conv2_block3_out').output
-    #  64, 64,  512
-    o2 = model.get_layer('conv3_block4_out').output
-    #  32, 32, 1024
-    o3 = model.get_layer('conv4_block6_out').output
-    #  16, 16, 2048
-    o4 = model.get_layer('conv5_block3_out').output
-    x = [o1, o2, o3, o4]
-    return x
 
-def SSD_OneNet(x, num_classes, prior_prob):
-    o1, o2, o3, o4 = x
+    #  32, 32, 1024
+    o2 = model.get_layer('conv4_block6_out').output
+
+    #  16, 16, 2048
+    o = model.get_layer('conv5_block3_out').output
+
     #  16, 16, 2048 >> 8, 8, 256
     x = Conv2D(128, kernel_size=(1, 1), activation='relu',
                padding='same',
-               name='stage5_a')(o4)
-    o5 = Conv2D(256, kernel_size=(3,3), strides=(2, 2),
-                                   activation='relu', padding='same',
-                                   name='stage5_b')(x)
+               name='stage5_a')(o)
+    o3 = Conv2D(256, kernel_size=(3,3), strides=(2, 2),
+               activation='relu', padding='same',
+               name='stage5_b')(x)
 
-    # o1
-    x = Conv2D(64, kernel_size=(3, 3), strides=(1, 1),
-               use_bias=False, padding='same',
-               kernel_initializer='he_normal',
-               kernel_regularizer=l2(5e-4))(o1)
-    x = BatchNormalization()(x)
-    y1 = Activation('relu')(x)
+    x = [o1, o2, o3]
+    return x
 
-    # o3
-    x = Conv2D(64, kernel_size=(3,3), strides=(1, 1),
-               use_bias=False, padding='same',
-               kernel_initializer='he_normal',
-               kernel_regularizer=l2(5e-4))(o3)
-    x = BatchNormalization()(x)
-    y2 = Activation('relu')(x)
-
-    # o5
-    x = Conv2D(64, kernel_size=(3,3), strides=(1, 1),
-               use_bias=False, padding='same',
-               kernel_initializer='he_normal',
-               kernel_regularizer=l2(5e-4))(o5)
-    x = BatchNormalization()(x)
-    y3 = Activation('relu')(x)
-
+def SSD_OneNet(x, num_classes, prior_prob, shortcut=True, mode=None):
+    o1, o2, o3 = x
     bias_value = -np.log((1 - prior_prob) / prior_prob)
+    output_list = []
 
     ## o1
-    z1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y1)
-    z1 = BatchNormalization()(z1)
-    z1 = Activation('relu')(z1)
-    cls1 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
-                bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid')(z1)
+    o1 = Conv2D(64, kernel_size=(3, 3), strides=(1, 1),
+               use_bias=False, padding='same',
+               kernel_initializer='he_normal',
+               kernel_regularizer=l2(5e-4), name='o1_conv')(o1)
+    o1 = BatchNormalization(name='o1_bn')(o1)
+
+    o1 = Activation('relu', name='o1_relu')(o1)
+
+
+    # loc header
+    cls1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), name='cls1_conv')(o1)
+    cls1 = GroupNormalization(groups=32, name='cls1_bn')(cls1)
+    cls1 = Activation('relu', name='cls1_relu')(cls1)
+    cls1 = Conv2D(num_classes, 3, padding='same', kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+                bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid', name='pred_cls1')(cls1)
 
     # loc header (128*128*4)
-    z2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y1)
-    z2 = BatchNormalization()(z2)
-    z2 = Activation('relu')(z2)
-    loc1 = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu')(z2)
+    loc1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), name='loc1_conv')(o1)
+    loc1 = GroupNormalization(groups=32, name='loc1_bn')(loc1)
+    loc1 = Activation('relu', name='loc1_relu')(loc1)
+    loc1 = Conv2D(4, 3, padding='same', kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu', name='loc1_output')(loc1)
     loc_dir1 = apply_ltrb(name='pred_location1')(loc1)
 
-    ## o3
-    z1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y2)
-    z1 = BatchNormalization()(z1)
-    z1 = Activation('relu')(z1)
-    cls2 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
-                bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid')(z1)
+
+    ## o2
+    o2 = Conv2D(64, kernel_size=(3, 3), strides=(1, 1),
+               use_bias=False, padding='same',
+               kernel_initializer='he_normal',
+               kernel_regularizer=l2(5e-4), name='o2_conv')(o2)
+    o2 = BatchNormalization(name='o2_bn')(o2)
+    o2 = Activation('relu', name='o2_relu')(o2)
+
+    # cls header (32*32*4)
+    cls2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+                name='cls2_conv')(o2)
+    cls2 = GroupNormalization(groups=32, name='cls2_bn')(cls2)
+    cls2 = Activation('relu', name='cls2_relu')(cls2)
+    if shortcut:
+        cls_shortcut = Conv2D(32, 3, 2, padding='same', use_bias=False, name='cls_shortcut1_conv1')(cls1)
+        cls_shortcut = BatchNormalization(name='cls_shortcut1_bn1')(cls_shortcut)
+        cls_shortcut = Activation('relu', name='cls_shortcut1_relu1')(cls_shortcut)
+        cls_shortcut = Conv2D(64, 3, 2, padding='same', use_bias=False, name='cls_shortcut1_conv2')(cls_shortcut)
+        cls_shortcut = BatchNormalization(name='cls_shortcut1_bn2')(cls_shortcut)
+        cls_shortcut = Activation('relu', name='cls_shortcut1_relu2')(cls_shortcut)
+        cls2 = Add()([cls2, cls_shortcut])
+    cls2 = Conv2D(num_classes, 3, padding='same', kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+                  bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid', name='pred_cls2')(cls2)
 
     # loc header (32*32*4)
-    z2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y2)
-    z2 = BatchNormalization()(z2)
-    z2 = Activation('relu')(z2)
-    loc2 = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu')(z2)
+    loc2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+                name='loc2_conv')(o2)
+    loc2 = GroupNormalization(groups=32, name='loc2_bn')(loc2)
+    loc2 = Activation('relu', name='loc2_relu')(loc2)
+    if shortcut:
+        loc_shortcut = Conv2D(32, 3, 2, padding='same', use_bias=False, name='loc_shortcut1_conv1')(loc1)
+        loc_shortcut = BatchNormalization(name='loc_shortcut1_bn1')(loc_shortcut)
+        loc_shortcut = Activation('relu', name='loc_shortcut1_relu1')(loc_shortcut)
+        loc_shortcut = Conv2D(64, 3, 2, padding='same', use_bias=False, name='loc_shortcut1_conv2')(loc_shortcut)
+        loc_shortcut = BatchNormalization(name='loc_shortcut1_bn2')(loc_shortcut)
+        loc_shortcut = Activation('relu', name='loc_shortcut1_relu2')(loc_shortcut)
+        loc2 = Add()([loc2, loc_shortcut])
+    loc2 = Conv2D(4, 3, padding='same', kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu',
+                  name='loc2_output')(loc2)
     loc_dir2 = apply_ltrb(name='pred_location2')(loc2)
 
-    ## o5
-    z1 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y3)
-    z1 = BatchNormalization()(z1)
-    z1 = Activation('relu')(z1)
-    cls3 = Conv2D(num_classes, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
-                bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid')(z1)
+
+    ## o3
+    o3 = Conv2D(64, kernel_size=(3, 3), strides=(1, 1),
+               use_bias=False, padding='same',
+               kernel_initializer='he_normal',
+               kernel_regularizer=l2(5e-4), name='o3_conv')(o3)
+    o3 = BatchNormalization(name='o3_bn')(o3)
+    o3 = Activation('relu', name='o3_relu' )(o3)
+
+    # cls header (8*8*4)
+    cls3 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), name='cls3_conv')(o3)
+    cls3 = GroupNormalization(groups=32, name='cls3_bn')(cls3)
+    cls3 = Activation('relu', name='cls3_relu')(cls3)
+    if shortcut:
+        cls_shortcut = Conv2D(32, 3, 2, padding='same', use_bias=False, name='cls_shortcut2_conv1')(cls2)
+        cls_shortcut = BatchNormalization(name='cls_shortcut2_bn1')(cls_shortcut)
+        cls_shortcut = Activation('relu', name='cls_shortcut2_relu1')(cls_shortcut)
+        cls_shortcut = Conv2D(64, 3, 2, padding='same', use_bias=False, name='cls_shortcut2_conv2')(cls_shortcut)
+        cls_shortcut = BatchNormalization(name='cls_shortcut2_bn2')(cls_shortcut)
+        cls_shortcut = Activation('relu', name='cls_shortcut2_relu2')(cls_shortcut)
+        cls3 = Add()([cls3, cls_shortcut])
+    cls3 = Conv2D(num_classes, 3, padding='same', kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),
+                bias_initializer=initializers.Constant(value=bias_value), activation='sigmoid', name='pred_cls3')(cls3)
 
     # loc header (8*8*4)
-    z2 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(y3)
-    z2 = BatchNormalization()(z2)
-    z2 = Activation('relu')(z2)
-    loc3 = Conv2D(4, 1, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu')(z2)
+    loc3 = Conv2D(64, 3, padding='same', use_bias=False, kernel_initializer='he_normal', kernel_regularizer=l2(5e-4),name='loc3_conv')(o3)
+    loc3 = GroupNormalization(groups=32, name='loc3_bn')(loc3)
+    loc3 = Activation('relu', name='loc3_relu')(loc3)
+    if shortcut:
+        loc_shortcut = Conv2D(32, 3, 2, padding='same', use_bias=False, name='loc_shortcut2_conv1')(loc2)
+        loc_shortcut = BatchNormalization(name='loc_shortcut2_bn1')(loc_shortcut)
+        loc_shortcut = Activation('relu', name='loc_shortcut2_relu1')(loc_shortcut)
+        loc_shortcut = Conv2D(64, 3, 2, padding='same', use_bias=False, name='loc_shortcut2_conv2')(loc_shortcut)
+        loc_shortcut = BatchNormalization(name='loc_shortcut2_bn2')(loc_shortcut)
+        loc_shortcut = Activation('relu', name='loc_shortcut2_relu2')(loc_shortcut)
+        loc3 = Add()([loc3, loc_shortcut])
+    loc3 = Conv2D(4, 3, padding='same', kernel_initializer='he_normal', kernel_regularizer=l2(5e-4), activation='relu', name='loc3_output')(loc3)
     loc_dir3 = apply_ltrb(name='pred_location3')(loc3)
 
-    return [cls1, loc1, loc_dir1, cls2, loc2, loc_dir2, cls3, loc3, loc_dir3]
+
+    if '1' in mode:
+        output_list.extend([cls1, loc1, loc_dir1])
+
+    if '2' in mode:
+        output_list.extend([cls2, loc2, loc_dir2])
+
+    if '3' in mode:
+        output_list.extend([cls3, loc3, loc_dir3])
+
+    return output_list
 
 
 

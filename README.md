@@ -1,4 +1,43 @@
-## CenterNet:Objects as Points目标检测模型在Tensorflow2当中的实现
+class apply_ltrb(Layer):
+    def __init__(self, name=None, **kwargs):
+        super(apply_ltrb, self).__init__(name=name, **kwargs)
+
+    def get_config(self):
+        config = super(apply_ltrb, self).get_config()
+        return config
+
+    def call(self, pred_ltrb):
+        '''
+        pred_ltrb 上的4個value分別是(x1, y1, x2, y2)表示以每個cell為中心，預測出來的框架左上角與右下角的相對距離
+        ltrb(left-up-right-bottom)
+        此函數將預測出來的相對位置換算成絕對位置
+
+        下面是一個框，在cell(cx,cy)取得相對距離(x1,y1,x2,y2)後，換算成絕對位置(cx-x1,cy-y1,cx+x2,cy+y2)
+        (cx-x1,cy-y1)
+          ----------------------------------
+          |          ↑                     |
+          |          |                     |
+          |          |y1                   |
+          |          |                     |
+          |←------(cx,cy)-----------------→|
+          |   x1     |          x2         |
+          |          |                     |
+          |          |                     |
+          |          |y2                   |
+          |          |                     |
+          |          |                     |
+          |          ↓                     |
+          ----------------------------------(cx+x2,cy+y2)
+        '''
+        b, w, h, c = tf.shape(pred_ltrb)[0], tf.shape(pred_ltrb)[1], tf.shape(pred_ltrb)[2], tf.shape(pred_ltrb)[3]
+        ct = tf.cast(tf.transpose(tf.meshgrid(tf.range(0, w), tf.range(0, h))), tf.float32)
+        # locations : w*h*2 這2個 value包含 cx=ct[0], cy=ct[1]
+        locations = tf.concat((ct - pred_ltrb[:, :, :, :2], ct + pred_ltrb[:, :, :, 2:]), axis=-1)
+        return locations
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)## CenterNet:Objects as Points目标检测模型在Tensorflow2当中的实现
 ---
 
 ## 目录

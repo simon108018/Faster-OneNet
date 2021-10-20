@@ -2,6 +2,7 @@ import colorsys
 import copy
 import math
 import os
+os.environ["CUDA_VISIBLE_DEVICES"]='-1'
 import pickle
 import time
 
@@ -15,9 +16,9 @@ from onenet import OneNet
 # from nets.onenet import onenet
 from utils.utils import onenet_correct_boxes, letterbox_image, nms
 
-gpus = tf.config.experimental.list_physical_devices(device_type='CPU')
-# for gpu in gpus:
-#     tf.config.experimental.set_memory_growth(gpu, True)
+gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 '''
 该FPS测试不包括前处理（归一化与resize部分）、绘图。
 包括的内容为：网络推理、得分门限筛选、非极大抑制。
@@ -49,37 +50,18 @@ class FPS_OneNet(OneNet):
         # -----------------------------------------------------------#
         photo = np.reshape(preprocess_image(photo), [1, self.input_shape[0], self.input_shape[1], self.input_shape[2]])
 
-        preds = self.get_pred(photo)
+        preds = self.get_pred(photo).numpy()
 
         if self.nms:
-            for k in preds.keys():
-                preds[k] = np.array(nms(preds[k], self.nms_threhold))
+            preds = np.array(nms(preds, self.nms_threhold))
             # preds = np.array(nms(preds, self.nms_threhold))
-        pred_num = 0
-        for pred in preds:
-            pred_num += len(pred[0])
-        if pred_num > 0:
-            firstIteration = True
-            for k in self.pred_scale.keys():
-                preds[k][0][:, 0:4] = preds[k][0][:, 0:4] / (self.input_shape[0] / self.pred_scale[k])
-                if firstIteration:
-                    det_label = preds[k][0][:, -1]
-                    det_conf = preds[k][0][:, -2]
-                    det_xmin, det_ymin, det_xmax, det_ymax = preds[k][0][:, 0], preds[k][0][:, 1], preds[k][0][:, 2], \
-                                                             preds[k][0][:, 3]
-                    firstIteration = False
-                    continue
-                det_label = np.concatenate([det_label, preds[k][0][:, -1]])
-                det_conf = np.concatenate([det_conf, preds[k][0][:, -2]])
-                det_xmin = np.concatenate([det_xmin, preds[k][0][:, 0]])
-                det_ymin = np.concatenate([det_ymin, preds[k][0][:, 1]])
-                det_xmax = np.concatenate([det_xmax, preds[k][0][:, 2]])
-                det_ymax = np.concatenate([det_ymax, preds[k][0][:, 3]])
-            # preds[0][:, 0:4] = preds[0][:, 0:4] / (self.input_shape[0] / 4)
-            #
-            # det_label = preds[0][:, -1]
-            # det_conf = preds[0][:, -2]
-            # det_xmin, det_ymin, det_xmax, det_ymax = preds[0][:, 0], preds[0][:, 1], preds[0][:, 2], preds[0][:, 3]
+
+        if len(preds[0]) > 0:
+            preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
+
+            det_label = preds[0][:, -1]
+            det_conf = preds[0][:, -2]
+            det_xmin, det_ymin, det_xmax, det_ymax = preds[0][:, 0], preds[0][:, 1], preds[0][:, 2], preds[0][:, 3]
 
             top_indices = [i for i, conf in enumerate(det_conf) if conf >= self.confidence]
             top_conf = det_conf[top_indices]
@@ -92,35 +74,18 @@ class FPS_OneNet(OneNet):
                                          np.array([self.input_shape[0], self.input_shape[1]]), image_shape)
 
         t1 = time.time()
-        for _ in tqdm(range(test_interval)):
-            preds = self.get_pred(photo)
+        for _ in range(test_interval):
+            preds = self.get_pred(photo).numpy()
 
             if self.nms:
-                # preds = np.array(nms(preds, self.nms_threhold))
-                for k in preds.keys():
-                    preds[k] = np.array(nms(preds[k], self.nms_threhold))
+                preds = np.array(nms(preds, self.nms_threhold))
 
-            pred_num = 0
-            for pred in preds:
-                pred_num += len(pred[0])
-            if pred_num > 0:
-                firstIteration = True
-                for k in self.pred_scale.keys():
-                    preds[k][0][:, 0:4] = preds[k][0][:, 0:4] / (self.input_shape[0] / self.pred_scale[k])
-                    if firstIteration:
-                        det_label = preds[k][0][:, -1]
-                        det_conf = preds[k][0][:, -2]
-                        det_xmin, det_ymin, det_xmax, det_ymax = preds[k][0][:, 0], preds[k][0][:, 1], preds[k][0][:,
-                                                                                                       2], \
-                                                                 preds[k][0][:, 3]
-                        firstIteration = False
-                        continue
-                    det_label = np.concatenate([det_label, preds[k][0][:, -1]])
-                    det_conf = np.concatenate([det_conf, preds[k][0][:, -2]])
-                    det_xmin = np.concatenate([det_xmin, preds[k][0][:, 0]])
-                    det_ymin = np.concatenate([det_ymin, preds[k][0][:, 1]])
-                    det_xmax = np.concatenate([det_xmax, preds[k][0][:, 2]])
-                    det_ymax = np.concatenate([det_ymax, preds[k][0][:, 3]])
+            if len(preds[0]) > 0:
+                preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
+
+                det_label = preds[0][:, -1]
+                det_conf = preds[0][:, -2]
+                det_xmin, det_ymin, det_xmax, det_ymax = preds[0][:, 0], preds[0][:, 1], preds[0][:, 2], preds[0][:, 3]
 
                 top_indices = [i for i, conf in enumerate(det_conf) if conf >= self.confidence]
                 top_conf = det_conf[top_indices]

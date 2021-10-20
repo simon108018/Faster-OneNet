@@ -41,7 +41,7 @@ class OneNet(object):
         "classes_path": 'model_data/voc_classes.txt',
         "backbone": 'resnet50',
         "input_shape": [512, 512, 3],
-        "confidence": 0.01,
+        "confidence": 0.2,
         "mode": 1, ## 請選擇輸出層，可輸入1、2、3、12、13、23或123。
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
@@ -130,127 +130,131 @@ class OneNet(object):
             map(lambda x: (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)),
                 self.colors))
 
-    def topk(self, cls_pred, max_objects=100):
-        # -------------------------------------------------------------------------#
-        #   当利用512x512x3图片进行coco数据集预测的时候
-        #   h = w = 128 num_classes = 80
-        #   Hot map热力图 -> b, 128, 128, 20
-        #   进行热力图的非极大抑制，利用3x3的卷积对热力图进行最大值筛选
-        #   找出一定区域内，得分最大的特征点。
-        # -------------------------------------------------------------------------#
-        b, w, h, c = cls_pred.shape
-        # cls_pred = nms(cls_pred)
-        # -------------------------------------------#
-        #   将所有结果平铺，获得(b, 128 * 128 * 20)
-        # -------------------------------------------#
-        cls_pred = np.reshape(cls_pred, (cls_pred.shape[0], -1))
-
-        # -----------------------------#
-        #   scores.shape = (b, k), indices.shape = (b, k)
-        # -----------------------------#
-        indices = cls_pred.argsort()[:, -max_objects:][:, ::-1]
-        scores = np.take_along_axis(cls_pred, indices, axis=-1)
-        # --------------------------------------#
-        #   计算求出种类、网格点以及索引。
-        # --------------------------------------#
-        #   這裡的 indices 包含了種類，值的range 在[0, 128 * 128 * 20)
-        class_ids = indices % c
-        xs = indices // c % w
-        ys = indices // c // w
-        #   這裡的 indices 已不包含種類，只計算位置，值的range 在[0, 128 * 128)
-        indices = ys * w + xs
-        return scores, indices, class_ids, xs, ys
-
-    def get_directly_loc(self, loc):
-        '''
-        pred_ltrb 上的4個value分別是(x1, y1, x2, y2)表示以每個cell為中心，預測出來的框架左上角與右下角的相對距離
-        ltrb(left-up-right-bottom)
-        此函數將預測出來的相對位置換算成絕對位置
-
-        下面是一個框，在cell(cx,cy)取得相對距離(x1,y1,x2,y2)後，換算成絕對位置(cx-x1,cy-y1,cx+x2,cy+y2)
-        (cx-x1,cy-y1)
-          ----------------------------------
-          |          ↑                     |
-          |          |                     |
-          |          |y1                   |
-          |          |                     |
-          |←------(cx,cy)-----------------→|
-          |   x1     |          x2         |
-          |          |                     |
-          |          |                     |
-          |          |y2                   |
-          |          |                     |
-          |          |                     |
-          |          ↓                     |
-          ----------------------------------(cx+x2,cy+y2)
-        '''
-        b, w, h, c = loc.shape
-        # ct = tf.cast(np.transpose(np.meshgrid(np.range(0, w), np.range(0, h))), tf.float32)
-        ct = np.transpose(np.meshgrid(np.arange(w), np.arange(h))).astype(loc.dtype)
-        # locations : w*h*2 這2個 value包含 cx=ct[0], cy=ct[1]
-        locations = np.concatenate((ct - loc[:, :, :, :2], ct + loc[:, :, :, 2:]), axis=-1)
-        return locations
+    # def topk(self, cls_pred, max_objects=100):
+    #     # -------------------------------------------------------------------------#
+    #     #   当利用512x512x3图片进行coco数据集预测的时候
+    #     #   h = w = 128 num_classes = 80
+    #     #   Hot map热力图 -> b, 128, 128, 20
+    #     #   进行热力图的非极大抑制，利用3x3的卷积对热力图进行最大值筛选
+    #     #   找出一定区域内，得分最大的特征点。
+    #     # -------------------------------------------------------------------------#
+    #     b, w, h, c = cls_pred.shape
+    #     # cls_pred = nms(cls_pred)
+    #     # -------------------------------------------#
+    #     #   将所有结果平铺，获得(b, 128 * 128 * 20)
+    #     # -------------------------------------------#
+    #     cls_pred = np.reshape(cls_pred, (cls_pred.shape[0], -1))
+    #
+    #     # -----------------------------#
+    #     #   scores.shape = (b, k), indices.shape = (b, k)
+    #     # -----------------------------#
+    #     indices = cls_pred.argsort()[:, -max_objects:][:, ::-1]
+    #     scores = np.take_along_axis(cls_pred, indices, axis=-1)
+    #     # --------------------------------------#
+    #     #   计算求出种类、网格点以及索引。
+    #     # --------------------------------------#
+    #     #   這裡的 indices 包含了種類，值的range 在[0, 128 * 128 * 20)
+    #     class_ids = indices % c
+    #     xs = indices // c % w
+    #     ys = indices // c // w
+    #     #   這裡的 indices 已不包含種類，只計算位置，值的range 在[0, 128 * 128)
+    #     indices = ys * w + xs
+    #     return scores, indices, class_ids, xs, ys
 
 
-    def decode_sub(self, cls_pred, loc_pred, max_objects=100):
-        scores, indices, class_ids, xs, ys = self.topk(cls_pred, max_objects=max_objects)
-        b = cls_pred.shape[0]
-        loc_pred = loc_pred.reshape([b, -1, 4])
-        topk_loc = np.take_along_axis(loc_pred, np.expand_dims(indices, axis=-1), axis=1)
-        topk_x1, topk_y1 = topk_loc[..., 0:1], topk_loc[..., 1:2]
-        topk_x2, topk_y2 = topk_loc[..., 2:3], topk_loc[..., 3:4]
-        scores = np.expand_dims(scores, axis=-1)
-        class_ids = np.expand_dims(class_ids, axis=-1).astype('float32')
-        # -----------------------------------------------------#
-        #   detections  预测框所有参数的堆叠
-        #   前四个是预测框的坐标，后两个是预测框的得分与种类
-        # -----------------------------------------------------#
-        detections = np.concatenate([topk_x1, topk_y1, topk_x2, topk_y2, scores, class_ids], axis=-1)
-        return detections
+    # def get_directly_loc(self, loc):
+    #     '''
+    #     pred_ltrb 上的4個value分別是(x1, y1, x2, y2)表示以每個cell為中心，預測出來的框架左上角與右下角的相對距離
+    #     ltrb(left-up-right-bottom)
+    #     此函數將預測出來的相對位置換算成絕對位置
+    #
+    #     下面是一個框，在cell(cx,cy)取得相對距離(x1,y1,x2,y2)後，換算成絕對位置(cx-x1,cy-y1,cx+x2,cy+y2)
+    #     (cx-x1,cy-y1)
+    #       ----------------------------------
+    #       |          ↑                     |
+    #       |          |                     |
+    #       |          |y1                   |
+    #       |          |                     |
+    #       |←------(cx,cy)-----------------→|
+    #       |   x1     |          x2         |
+    #       |          |                     |
+    #       |          |                     |
+    #       |          |y2                   |
+    #       |          |                     |
+    #       |          |                     |
+    #       |          ↓                     |
+    #       ----------------------------------(cx+x2,cy+y2)
+    #     '''
+    #     b, w, h, c = loc.shape
+    #     # ct = tf.cast(np.transpose(np.meshgrid(np.range(0, w), np.range(0, h))), tf.float32)
+    #     ct = np.transpose(np.meshgrid(np.arange(w), np.arange(h))).astype(loc.dtype)
+    #     # locations : w*h*2 這2個 value包含 cx=ct[0], cy=ct[1]
+    #     locations = np.concatenate((ct - loc[:, :, :, :2], ct + loc[:, :, :, 2:]), axis=-1)
+    #     return locations
 
 
-    def decode(self, model_pred, max_objects=100):
-        detections = {}
-        for i in range(len(self.mode)):
-            detections['detections{}'.format(self.mode[i])] = self.decode_sub(model_pred[2*i], model_pred[2*i+1], max_objects=max_objects)
-
-        return detections
-
+    # def decode_sub(self, cls_pred, loc_pred, max_objects=100):
+    #     scores, indices, class_ids, xs, ys = self.topk(cls_pred, max_objects=max_objects)
+    #     b = cls_pred.shape[0]
+    #     loc_pred = loc_pred.reshape([b, -1, 4])
+    #     topk_loc = np.take_along_axis(loc_pred, np.expand_dims(indices, axis=-1), axis=1)
+    #     topk_x1, topk_y1 = topk_loc[..., 0:1], topk_loc[..., 1:2]
+    #     topk_x2, topk_y2 = topk_loc[..., 2:3], topk_loc[..., 3:4]
+    #     scores = np.expand_dims(scores, axis=-1)
+    #     class_ids = np.expand_dims(class_ids, axis=-1).astype('float32')
+    #     # -----------------------------------------------------#
+    #     #   detections  预测框所有参数的堆叠
+    #     #   前四个是预测框的坐标，后两个是预测框的得分与种类
+    #     # -----------------------------------------------------#
+    #     detections = np.concatenate([topk_x1, topk_y1, topk_x2, topk_y2, scores, class_ids], axis=-1)
+    #     return detections
+    #
+    #
+    # def decode(self, model_pred, max_objects=100):
+    #     detections = {}
+    #     for i in range(len(self.mode)):
+    #         detections['detections{}'.format(self.mode[i])] = self.decode_sub(model_pred[2*i], model_pred[2*i+1], max_objects=max_objects)
+    #
+    #     return detections
 
     def get_pred(self, photo):
-        # mode
-        # 123 --> predict all result
-        # 1 --> only output first prediction
-        # 12 --> output first & second prediction
-        # 2 --> only output second prediction
-        if self.use_quantization:
-            if self.input_details['dtype'] == np.uint8:
-                input_scale, input_zero_point = self.input_details["quantization"]
-                photo = photo / input_scale + input_zero_point
-            photo = photo.astype(self.input_details["dtype"])
-            self.interpreter.set_tensor(self.input_details["index"], photo)
-            self.interpreter.invoke()
-            output_cls = self.interpreter.get_tensor(self.output_details[0]["index"])
-            output_loc = self.interpreter.get_tensor(self.output_details[1]["index"])
-            output_loc = self.get_directly_loc(output_loc)
-            # print(output_cls)
-            preds = self.decode(output_cls, output_loc, max_objects=100)
-            # print(preds)
-            return preds
-        else:
-            # start = time.time()
-            model_preds = self.onenet(photo, training=False)
-            for i in range(len(model_preds)):
-                if (i % 2 == 1):
-                    model_preds[i] = self.get_directly_loc(model_preds[i].numpy())
+        preds = self.onenet(photo, training=False)
+        return preds
 
-
-            # end = time.time()
-
-            preds = self.decode(model_preds,
-                                max_objects=100)
-            # print('預測時花費了{:.2f}秒'.format(end - start))
-            return preds
+    # def get_pred(self, photo):
+    #     # mode
+    #     # 123 --> predict all result
+    #     # 1 --> only output first prediction
+    #     # 12 --> output first & second prediction
+    #     # 2 --> only output second prediction
+    #     if self.use_quantization:
+    #         if self.input_details['dtype'] == np.uint8:
+    #             input_scale, input_zero_point = self.input_details["quantization"]
+    #             photo = photo / input_scale + input_zero_point
+    #         photo = photo.astype(self.input_details["dtype"])
+    #         self.interpreter.set_tensor(self.input_details["index"], photo)
+    #         self.interpreter.invoke()
+    #         output_cls = self.interpreter.get_tensor(self.output_details[0]["index"])
+    #         output_loc = self.interpreter.get_tensor(self.output_details[1]["index"])
+    #         output_loc = self.get_directly_loc(output_loc)
+    #         # print(output_cls)
+    #         preds = self.decode(output_cls, output_loc, max_objects=100)
+    #         # print(preds)
+    #         return preds
+    #     else:
+    #         # start = time.time()
+    #         model_preds = self.onenet(photo, training=False)
+    #         for i in range(len(model_preds)):
+    #             if (i % 2 == 1):
+    #                 model_preds[i] = self.get_directly_loc(model_preds[i].numpy())
+    #
+    #
+    #         # end = time.time()
+    #
+    #         preds = self.decode(model_preds,
+    #                             max_objects=100)
+    #         # print('預測時花費了{:.2f}秒'.format(end - start))
+    #         return preds
 
     # ---------------------------------------------------#
     #   检测图片
@@ -270,7 +274,7 @@ class OneNet(object):
         # -----------------------------------------------------------#
         photo = np.reshape(preprocess_image(photo), [1, self.input_shape[0], self.input_shape[1], self.input_shape[2]])
 
-        preds = self.get_pred(photo)
+        preds = self.get_pred(photo).numpy()
         # -------------------------------------------------------#
         #   对于onenet网络来讲，确立中心非常重要。
         #   对于大目标而言，会存在许多的局部信息。
@@ -280,32 +284,19 @@ class OneNet(object):
         #   实际测试中，hourglass为主干网络时有无额外的nms相差不大，resnet相差较大。
         # -------------------------------------------------------#
         if self.nms:
-            for k in preds.keys():
-                preds[k] = np.array(nms(preds[k], self.nms_threhold))
-        pred_num = 0
-        for pred in preds:
-            pred_num += len(pred[0])
-        if pred_num <= 0:
-            return image
+            preds = np.array(nms(preds, self.nms_threhold))
 
+        if len(preds[0]) <= 0:
+            return image
         # -----------------------------------------------------------#
         #   将预测结果转换成小数的形式
         # -----------------------------------------------------------#
-        firstIteration = True
-        for k in self.pred_scale.keys():
-            preds[k][0][:, 0:4] = preds[k][0][:, 0:4] / (self.input_shape[0] / self.pred_scale[k])
-            if firstIteration:
-                det_label = preds[k][0][:, -1]
-                det_conf = preds[k][0][:, -2]
-                det_xmin, det_ymin, det_xmax, det_ymax = preds[k][0][:, 0], preds[k][0][:, 1], preds[k][0][:, 2], preds[k][0][:, 3]
-                firstIteration = False
-                continue
-            det_label = np.concatenate([det_label , preds[k][0][:, -1] ])
-            det_conf = np.concatenate([det_conf , preds[k][0][:, -2] ])
-            det_xmin = np.concatenate([det_xmin, preds[k][0][:, 0]])
-            det_ymin = np.concatenate([det_ymin, preds[k][0][:, 1]])
-            det_xmax = np.concatenate([det_xmax, preds[k][0][:, 2]])
-            det_ymax = np.concatenate([det_ymax, preds[k][0][:, 3]])
+        preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
+
+        det_label = preds[0][:, -1]
+        det_conf = preds[0][:, -2]
+        det_xmin, det_ymin, det_xmax, det_ymax = preds[0][:, 0], preds[0][:, 1], preds[0][:, 2], preds[0][:, 3]
+
         # -----------------------------------------------------------#
         #   筛选出其中得分高于confidence的框
         # -----------------------------------------------------------#
@@ -365,3 +356,73 @@ class OneNet(object):
             draw.text(text_origin, str(label, 'UTF-8'), fill=(0, 0, 0), font=font)
             del draw
         return image
+
+    def get_FPS(self, image, test_interval):
+        image_shape = np.array(np.shape(image)[0:2])
+        # ---------------------------------------------------------#
+        #   给图像增加灰条，实现不失真的resize
+        # ---------------------------------------------------------#
+        crop_img = letterbox_image(image, [self.input_shape[0], self.input_shape[1]])
+        # ----------------------------------------------------------------------------------#
+        #   将RGB转化成BGR，这是因为原始的centernet_hourglass权值是使用BGR通道的图片训练的
+        # ----------------------------------------------------------------------------------#
+        photo = np.array(crop_img, dtype=np.float32)[:, :, ::-1]
+        # -----------------------------------------------------------#
+        #   图片预处理，归一化。获得的photo的shape为[1, 512, 512, 3]
+        # -----------------------------------------------------------#
+        photo = np.reshape(preprocess_image(photo), [1, self.input_shape[0], self.input_shape[1], self.input_shape[2]])
+
+        preds = self.get_pred(photo).numpy()
+
+        if self.nms:
+            preds = np.array(nms(preds, self.nms_threhold))
+            # preds = np.array(nms(preds, self.nms_threhold))
+
+        if len(preds[0]) > 0:
+            preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
+
+            det_label = preds[0][:, -1]
+            det_conf = preds[0][:, -2]
+            det_xmin, det_ymin, det_xmax, det_ymax = preds[0][:, 0], preds[0][:, 1], preds[0][:, 2], preds[0][:, 3]
+
+            top_indices = [i for i, conf in enumerate(det_conf) if conf >= self.confidence]
+            top_conf = det_conf[top_indices]
+            top_label_indices = det_label[top_indices].tolist()
+            top_xmin, top_ymin, top_xmax, top_ymax = np.expand_dims(det_xmin[top_indices], -1), np.expand_dims(
+                det_ymin[top_indices], -1), np.expand_dims(det_xmax[top_indices], -1), np.expand_dims(
+                det_ymax[top_indices], -1)
+
+            boxes = onenet_correct_boxes(top_ymin, top_xmin, top_ymax, top_xmax,
+                                         np.array([self.input_shape[0], self.input_shape[1]]), image_shape)
+
+        t1 = time.time()
+        tt = 0
+        for _ in range(test_interval):
+            t3 = time.time()
+            preds = self.get_pred(photo).numpy()
+            t4 = time.time()
+            tt += t4-t3
+            if self.nms:
+                preds = np.array(nms(preds, self.nms_threhold))
+
+            if len(preds[0]) > 0:
+                preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
+
+                det_label = preds[0][:, -1]
+                det_conf = preds[0][:, -2]
+                det_xmin, det_ymin, det_xmax, det_ymax = preds[0][:, 0], preds[0][:, 1], preds[0][:, 2], preds[0][:, 3]
+
+                top_indices = [i for i, conf in enumerate(det_conf) if conf >= self.confidence]
+                top_conf = det_conf[top_indices]
+                top_label_indices = det_label[top_indices].tolist()
+                top_xmin, top_ymin, top_xmax, top_ymax = np.expand_dims(det_xmin[top_indices], -1), np.expand_dims(
+                    det_ymin[top_indices], -1), np.expand_dims(det_xmax[top_indices], -1), np.expand_dims(
+                    det_ymax[top_indices], -1)
+
+                boxes = onenet_correct_boxes(top_ymin, top_xmin, top_ymax, top_xmax,
+                                             np.array([self.input_shape[0], self.input_shape[1]]), image_shape)
+
+        t2 = time.time()
+        tact_time = (t2 - t1) / test_interval
+        tact_time_ = tt / test_interval
+        return tact_time, tact_time_
