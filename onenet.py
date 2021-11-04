@@ -37,21 +37,23 @@ def preprocess_image(image):
 class OneNet(object):
     _defaults = {
         # "model_path": './logs18/tflite/model.tflite',
-        "model_path": 'model_data/mymodel_weights.h5',
+        "model_path": 'model_data/ep1700-loss7.924-val_loss10.101.h5',
+        # "model_path": 'model_data/mymodel_weights.h5',
         "classes_path": 'model_data/voc_classes.txt',
+        "structure": 'SSD_OneNet',
         "backbone": 'resnet50',
-        "input_shape": [512, 512, 3],
-        "confidence": 0.2,
-        "mode": 1, ## 請選擇輸出層，可輸入1、2、3、12、13、23或123。
+        "input_shape": [300, 300, 3],
+        "confidence": 0.1,
+        "mode": '5', ## 請選擇輸出層，可輸入1、2、3、12、13、23或123。
+        "max_objects": 10,
+        "shortcut": True,
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
         # 也可以根据检测效果自行选择
         "nms": True,
-        "nms_threhold": 0.4,
+        "nms_threhold": 0.5,
         "use_quantization": False,
     }
-
-
 
 
     @classmethod
@@ -114,7 +116,8 @@ class OneNet(object):
             print('{} model, anchors, and classes loaded.'.format(self.model_path))
 
         else:
-            self.onenet = onenet(self.input_shape, num_classes=self.num_classes, backbone=self.backbone, mode='only_output'+self.mode)
+            self.onenet = onenet(self.input_shape, num_classes=self.num_classes, structure=self.structure, backbone=self.backbone,
+                                 shortcut=self.shortcut, max_objects=self.max_objects, mode='only_output_'+self.mode)
             self.onenet.load_weights(self.model_path, by_name=True, skip_mismatch=True)
             print('{} model, anchors, and classes loaded.'.format(self.model_path))
             if self.use_quantization:
@@ -130,67 +133,37 @@ class OneNet(object):
             map(lambda x: (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)),
                 self.colors))
 
-    # def topk(self, cls_pred, max_objects=100):
-    #     # -------------------------------------------------------------------------#
-    #     #   当利用512x512x3图片进行coco数据集预测的时候
-    #     #   h = w = 128 num_classes = 80
-    #     #   Hot map热力图 -> b, 128, 128, 20
-    #     #   进行热力图的非极大抑制，利用3x3的卷积对热力图进行最大值筛选
-    #     #   找出一定区域内，得分最大的特征点。
-    #     # -------------------------------------------------------------------------#
-    #     b, w, h, c = cls_pred.shape
-    #     # cls_pred = nms(cls_pred)
-    #     # -------------------------------------------#
-    #     #   将所有结果平铺，获得(b, 128 * 128 * 20)
-    #     # -------------------------------------------#
-    #     cls_pred = np.reshape(cls_pred, (cls_pred.shape[0], -1))
-    #
-    #     # -----------------------------#
-    #     #   scores.shape = (b, k), indices.shape = (b, k)
-    #     # -----------------------------#
-    #     indices = cls_pred.argsort()[:, -max_objects:][:, ::-1]
-    #     scores = np.take_along_axis(cls_pred, indices, axis=-1)
-    #     # --------------------------------------#
-    #     #   计算求出种类、网格点以及索引。
-    #     # --------------------------------------#
-    #     #   這裡的 indices 包含了種類，值的range 在[0, 128 * 128 * 20)
-    #     class_ids = indices % c
-    #     xs = indices // c % w
-    #     ys = indices // c // w
-    #     #   這裡的 indices 已不包含種類，只計算位置，值的range 在[0, 128 * 128)
-    #     indices = ys * w + xs
-    #     return scores, indices, class_ids, xs, ys
+    def topk(self, cls_pred, max_objects=100):
+        # -------------------------------------------------------------------------#
+        #   当利用512x512x3图片进行coco数据集预测的时候
+        #   h = w = 128 num_classes = 80
+        #   Hot map热力图 -> b, 128, 128, 20
+        #   进行热力图的非极大抑制，利用3x3的卷积对热力图进行最大值筛选
+        #   找出一定区域内，得分最大的特征点。
+        # -------------------------------------------------------------------------#
+        b, w, h, c = cls_pred.shape
+        # cls_pred = nms(cls_pred)
+        # -------------------------------------------#
+        #   将所有结果平铺，获得(b, 128 * 128 * 20)
+        # -------------------------------------------#
+        cls_pred = np.reshape(cls_pred, (cls_pred.shape[0], -1))
 
+        # -----------------------------#
+        #   scores.shape = (b, k), indices.shape = (b, k)
+        # -----------------------------#
+        indices = cls_pred.argsort()[:, -max_objects:][:, ::-1]
+        scores = np.take_along_axis(cls_pred, indices, axis=-1)
+        # --------------------------------------#
+        #   计算求出种类、网格点以及索引。
+        # --------------------------------------#
+        #   這裡的 indices 包含了種類，值的range 在[0, 128 * 128 * 20)
+        class_ids = indices % c
+        xs = indices // c % w
+        ys = indices // c // w
+        #   這裡的 indices 已不包含種類，只計算位置，值的range 在[0, 128 * 128)
+        indices = ys * w + xs
+        return scores, indices, class_ids, xs, ys
 
-    # def get_directly_loc(self, loc):
-    #     '''
-    #     pred_ltrb 上的4個value分別是(x1, y1, x2, y2)表示以每個cell為中心，預測出來的框架左上角與右下角的相對距離
-    #     ltrb(left-up-right-bottom)
-    #     此函數將預測出來的相對位置換算成絕對位置
-    #
-    #     下面是一個框，在cell(cx,cy)取得相對距離(x1,y1,x2,y2)後，換算成絕對位置(cx-x1,cy-y1,cx+x2,cy+y2)
-    #     (cx-x1,cy-y1)
-    #       ----------------------------------
-    #       |          ↑                     |
-    #       |          |                     |
-    #       |          |y1                   |
-    #       |          |                     |
-    #       |←------(cx,cy)-----------------→|
-    #       |   x1     |          x2         |
-    #       |          |                     |
-    #       |          |                     |
-    #       |          |y2                   |
-    #       |          |                     |
-    #       |          |                     |
-    #       |          ↓                     |
-    #       ----------------------------------(cx+x2,cy+y2)
-    #     '''
-    #     b, w, h, c = loc.shape
-    #     # ct = tf.cast(np.transpose(np.meshgrid(np.range(0, w), np.range(0, h))), tf.float32)
-    #     ct = np.transpose(np.meshgrid(np.arange(w), np.arange(h))).astype(loc.dtype)
-    #     # locations : w*h*2 這2個 value包含 cx=ct[0], cy=ct[1]
-    #     locations = np.concatenate((ct - loc[:, :, :, :2], ct + loc[:, :, :, 2:]), axis=-1)
-    #     return locations
 
 
     # def decode_sub(self, cls_pred, loc_pred, max_objects=100):
@@ -396,12 +369,12 @@ class OneNet(object):
                                          np.array([self.input_shape[0], self.input_shape[1]]), image_shape)
 
         t1 = time.time()
-        tt = 0
+        # tt = 0
         for _ in range(test_interval):
-            t3 = time.time()
+            # t3 = time.time()
             preds = self.get_pred(photo).numpy()
-            t4 = time.time()
-            tt += t4-t3
+            # t4 = time.time()
+            # tt += t4-t3
             if self.nms:
                 preds = np.array(nms(preds, self.nms_threhold))
 
@@ -424,5 +397,5 @@ class OneNet(object):
 
         t2 = time.time()
         tact_time = (t2 - t1) / test_interval
-        tact_time_ = tt / test_interval
-        return tact_time, tact_time_
+        # tact_time_ = tt / test_interval
+        return tact_time

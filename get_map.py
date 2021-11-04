@@ -14,8 +14,8 @@ import numpy as np
 代码克隆自https://github.com/Cartucho/mAP
 如果想要设定mAP0.x，比如计算mAP0.75，可以设定MINOVERLAP = 0.75。
 '''
-MINOVERLAP = 0.50
-
+MINOVERLAP = 0.25
+results_files_path = "out34" + "_mAP{:.2f}".format(MINOVERLAP) + "_conf0.1"
 parser = argparse.ArgumentParser()
 parser.add_argument('-na', '--no-animation', help="no animation is shown.", action="store_true")
 parser.add_argument('-np', '--no-plot', help="no plot is shown.", action="store_true")
@@ -308,7 +308,7 @@ def draw_plot_func(dictionary, n_classes, window_title, plot_title, x_label, out
             if i == (len(sorted_values) - 1):  # largest bar
                 adjust_axes(r, t, fig, axes)
     # set window title
-    fig.canvas.set_window_title(window_title)
+    fig.canvas.manager.set_window_title(window_title)
     # write classes in y axis
     tick_font_size = 12
     plt.yticks(range(n_classes), sorted_keys, fontsize=tick_font_size)
@@ -350,7 +350,8 @@ def draw_plot_func(dictionary, n_classes, window_title, plot_title, x_label, out
 TEMP_FILES_PATH = ".temp_files"
 if not os.path.exists(TEMP_FILES_PATH):  # if it doesn't exist already
     os.makedirs(TEMP_FILES_PATH)
-results_files_path = "results"
+if not results_files_path:
+    results_files_path = "results"
 if os.path.exists(results_files_path):  # if it exist already
     # reset the results directory
     shutil.rmtree(results_files_path)
@@ -523,6 +524,7 @@ for class_index, class_name in enumerate(gt_classes):
 sum_AP = 0.0
 ap_dictionary = {}
 lamr_dictionary = {}
+
 with open(results_files_path + "/results.txt", 'w') as results_file:
     results_file.write("# AP and precision/recall per class\n")
     count_true_positives = {}
@@ -647,7 +649,6 @@ with open(results_files_path + "/results.txt", 'w') as results_file:
                     color = green
                 text = "Result: " + status + " "
                 img, line_width = draw_text_in_image(img, text, (margin + line_width, v_pos), color, line_width)
-
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 if ovmax > 0:  # if there is intersections between the bounding-boxes
                     bbgt = [int(round(float(x))) for x in gt_match["bbox"].split()]
@@ -729,7 +730,7 @@ with open(results_files_path + "/results.txt", 'w') as results_file:
             plt.fill_between(area_under_curve_x, 0, area_under_curve_y, alpha=0.2, edgecolor='r')
 
             fig = plt.gcf()
-            fig.canvas.set_window_title('AP ' + class_name)
+            fig.canvas.manager.set_window_title('AP ' + class_name)
 
             plt.title('class: ' + text)
             plt.xlabel('Recall')

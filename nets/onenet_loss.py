@@ -66,8 +66,10 @@ class Focal_loss(Layer):
         num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
         scatter = tf.scatter_nd(indices=indices, updates=reg_mask, shape=[b, w * h, c])
         labels = tf.cast(tf.greater(scatter, 0), tf.float32)
-        cls_loss = self.sigmoid_focal_loss(cls_pred, labels, alpha=self.alpha, gamma=self.gamma,
-                                           reduction='sum') / num_box
+        cls_loss = tf.cond(tf.equal(num_box, 0.),
+                           lambda: 0.,
+                           lambda: self.sigmoid_focal_loss(cls_pred, labels, alpha=self.alpha, gamma=self.gamma, reduction='sum') / num_box
+                           )
 
         return cls_loss
 
@@ -131,7 +133,9 @@ class Giou_loss(Layer):
         loc_pred = tf.divide(loc_pred, [w, h, w, h])
         num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
         loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
-        giou_loss = tf.reduce_sum(tfa.losses.giou_loss(loc_pred_, loc_true) * reg_mask) / num_box
+        giou_loss = tf.cond(tf.equal(num_box, 0),
+                            lambda: 0.,
+                            lambda: tf.reduce_sum(tfa.losses.giou_loss(loc_pred_, loc_true) * reg_mask) / num_box)
         return giou_loss
 
     def get_config(self):
@@ -150,8 +154,9 @@ class Loc_loss(Layer):
         loc_pred = tf.divide(loc_pred, [w, h, w, h])
         num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
         loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
-        reg_loss = tf.reduce_sum(tf.abs(tf.subtract(loc_true, loc_pred_)) * tf.expand_dims(reg_mask, -1)) / num_box
-
+        reg_loss = tf.cond(tf.equal(num_box, 0),
+                            lambda: 0.,
+                            lambda: tf.reduce_sum(tf.abs(tf.subtract(loc_true, loc_pred_)) * tf.expand_dims(reg_mask, -1)) / num_box)
         return reg_loss
 
     def get_config(self):

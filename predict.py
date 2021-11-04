@@ -17,7 +17,7 @@ import time
 import cv2
 import numpy as np
 
-device_type = 'GPU'
+device_type = 'CPU'
 if device_type=='GPU':
     gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
     for gpu in gpus:
@@ -108,8 +108,7 @@ if __name__ == "__main__":
     elif mode == "fps":
         test_interval = 100
         img = Image.open('img/street.jpg')
-        tact_time, tact_time_ = onenet.get_FPS(img, test_interval)
+        tact_time = onenet.get_FPS(img, test_interval)
         print(str(tact_time) + ' seconds, ' + str(1 / tact_time) + 'FPS, @batch_size 1')
-        print(str(tact_time_) + ' seconds, ' + str(1 / tact_time_) + 'FPS, @batch_size 1')
     else:
         raise AssertionError("Please specify the correct mode: 'predict', 'video' or 'fps'.")

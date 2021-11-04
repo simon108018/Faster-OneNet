@@ -22,7 +22,7 @@ class Generator(object):
         self.train_lines = train_lines
         self.val_lines = val_lines
         self.input_size = input_size
-        self.output_size = (int(input_size[0]/4) , int(input_size[1]/4))
+        # self.output_size = (int(input_size[0]/4), int(input_size[1]/4))
         self.num_classes = num_classes
         self.max_objects = max_objects
 
@@ -144,7 +144,7 @@ class Generator(object):
 
             b = 0
             for annotation_line in lines:
-                img,y = self.get_random_data(annotation_line, self.input_size[0:2], random=train)
+                img, y = self.get_random_data(annotation_line, self.input_size[0:2], random=train)
 
                 if len(y)!=0:
                     boxes = np.array(y[:,:4], dtype=np.float32)
@@ -156,8 +156,8 @@ class Generator(object):
                 for i in range(len(y)):
                     bbox = boxes[i].copy()
                     bbox = np.array(bbox)
-                    bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, self.output_size[1] - 1)
-                    bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, self.output_size[0] - 1)
+                    bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, self.input_size[1] - 1)
+                    bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, self.input_size[0] - 1)
                     cls_id = int(y[i,-1])
 
                     # 獲得類別

@@ -2,7 +2,7 @@ import colorsys
 import copy
 import math
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]='-1'
+# os.environ["CUDA_VISIBLE_DEVICES"]='-1'
 import pickle
 import time
 

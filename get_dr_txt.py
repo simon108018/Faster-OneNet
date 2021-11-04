@@ -47,7 +47,7 @@ class mAP_OneNet(OneNet):
     # ---------------------------------------------------#
     def detect_image(self, image_id, image):
         f = open("./input/detection-results/" + image_id + ".txt", "w")
-        self.confidence = 0.5
+        self.confidence = 0.1
         self.nms_threhold = 0.2
         image_shape = np.array(np.shape(image)[0:2])
         # ---------------------------------------------------------#
@@ -63,7 +63,7 @@ class mAP_OneNet(OneNet):
         # -----------------------------------------------------------#
         photo = np.reshape(preprocess_image(photo), [1, self.input_shape[0], self.input_shape[1], self.input_shape[2]])
 
-        preds = self.get_pred(photo)
+        preds = self.get_pred(photo).numpy()
         # -------------------------------------------------------#
         #   对于onenet网络来讲，确立中心非常重要。
         #   对于大目标而言，会存在许多的局部信息。
@@ -74,32 +74,20 @@ class mAP_OneNet(OneNet):
         # -------------------------------------------------------#
 
         if self.nms:
-            for k in preds.keys():
-                preds[k] = np.array(nms(preds[k], self.nms_threhold))
-        pred_num = 0
-        for pred in preds:
-            pred_num += len(pred[0])
-        if pred_num <= 0:
+            preds = np.array(nms(preds, self.nms_threhold))
+
+        if len(preds[0]) <= 0:
             return
 
-            # -----------------------------------------------------------#
+        # -----------------------------------------------------------#
         #   将预测结果转换成小数的形式
         # -----------------------------------------------------------#
-        firstIteration = True
-        for k in self.pred_scale.keys():
-            preds[k][0][:, 0:4] = preds[k][0][:, 0:4] / (self.input_shape[0] / self.pred_scale[k])
-            if firstIteration:
-                det_label = preds[k][0][:, -1]
-                det_conf = preds[k][0][:, -2]
-                det_xmin, det_ymin, det_xmax, det_ymax = preds[k][0][:, 0], preds[k][0][:, 1], preds[k][0][:, 2], preds[k][0][:, 3]
-                firstIteration = False
-                continue
-            det_label = np.concatenate([det_label , preds[k][0][:, -1] ])
-            det_conf = np.concatenate([det_conf , preds[k][0][:, -2] ])
-            det_xmin = np.concatenate([det_xmin, preds[k][0][:, 0]])
-            det_ymin = np.concatenate([det_ymin, preds[k][0][:, 1]])
-            det_xmax = np.concatenate([det_xmax, preds[k][0][:, 2]])
-            det_ymax = np.concatenate([det_ymax, preds[k][0][:, 3]])
+        preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
+
+        det_label = preds[0][:, -1]
+        det_conf = preds[0][:, -2]
+        det_xmin, det_ymin, det_xmax, det_ymax = preds[0][:, 0], preds[0][:, 1], preds[0][:, 2], preds[0][:, 3]
+
         # -----------------------------------------------------------#
         #   筛选出其中得分高于confidence的框
         # -----------------------------------------------------------#
@@ -110,7 +98,6 @@ class mAP_OneNet(OneNet):
                                                  np.expand_dims(det_ymin[top_indices], -1), \
                                                  np.expand_dims(det_xmax[top_indices], -1), \
                                                  np.expand_dims(det_ymax[top_indices], -1)
-
 
         # -----------------------------------------------------------#
         #   去掉灰条部分
