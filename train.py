@@ -4,12 +4,11 @@ import os
 from datetime import datetime
 import tensorflow as tf
 import tensorflow_addons as tfa
-from tensorflow import keras
 from tensorflow.keras.callbacks import (EarlyStopping, ReduceLROnPlateau,
                                         TensorBoard)
 from utils.utils import ModelCheckpoint
-from nets.onenet_generator import Generator
-from nets.onenet import onenet
+from nets.data_generator import Generator
+from nets.build_model import build_model
 
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:
@@ -49,13 +48,13 @@ if __name__ == "__main__":
     #-----------------------------#
     #   图片的大小
     #-----------------------------#
-    input_shape = [300, 300, 3]
+    input_shape = [320, 320, 3]
     #-----------------------------#
     #   训练前一定要注意修改
     #   classes_path对应的txt的内容
     #   修改成自己需要分的类
     #-----------------------------#
-    structure = 'SSD_OneNet'
+    structure = 'ssd_onenet'
     classes_path = 'model_data/voc_classes.txt'
     #----------------------------------------------------#
     #   获取classes和数量
@@ -75,13 +74,15 @@ if __name__ == "__main__":
     #   训练自己的数据集时提示维度不匹配正常
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
-
+    path = './logs/{}'.format(structure)
+    if not os.path.isdir('./logs/{}'.format(structure)):
+        os.mkdir(path)
     if backbone == "resnet50":
-        path = './logs/{}/resnet50'.format(structure)
+        path +='/resnet50'.format(structure)
     elif backbone == "resnet18":
-        path = './logs/{}/resnet18'.format(structure)
+        path +='/resnet50'.format(structure)
 
-    if not path:
+    if not os.path.isdir(path):
         os.mkdir(path)
     model_path = new_log(path)
 
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     num_train = len(lines) - num_val
 
 
-    def fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch, loss_names, warmup_proportion=0.1, min_scale=1e-2, max_objects=100):
+    def fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch, warmup_proportion=0.1, min_scale=1e-2, max_objects=100):
         # -------------------------------------------------------------------------------#
         #   训练参数的设置
         #   logging表示tensorboard的保存地址
@@ -123,13 +124,15 @@ if __name__ == "__main__":
                                                  warmup_proportion=warmup_proportion,
                                                  weight_decay=1e-4,
                                                  min_lr=Lr * min_scale)
-        loss_list = {}
-        loss_weights = []
-        for name in loss_names:
-            loss_list[name] = lambda y_true, y_pred: y_pred
-            if 'cls' in name: loss_weights.append(2)
-            if 'loc' in name: loss_weights.append(5)
-            if 'giou' in name: loss_weights.append(2)
+        loss_list = {'cls':lambda y_true, y_pred: y_pred,
+                     'loc':lambda y_true, y_pred: y_pred,
+                     'giou':lambda y_true, y_pred: y_pred}
+        loss_weights = [2, 5, 2]
+        # for name in loss_names:
+        #     loss_list[name] = lambda y_true, y_pred: y_pred
+        #     if 'cls' in name: loss_weights.append(2)
+        #     if 'loc' in name: loss_weights.append(5)
+        #     if 'giou' in name: loss_weights.append(2)
 
 
         model.compile(
@@ -148,49 +151,53 @@ if __name__ == "__main__":
         return histogram
 
     #----------------------------------------------------#
-    #   train12345 + freeze
+    #   freeze
     #----------------------------------------------------#
-    # model = onenet(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train12345')
-    # if model_path:
-    #     model.load_weights(model_path, by_name=True, skip_mismatch=True)
-    #     print('successful load weights from {}'.format(model_path))
-    #
-    # Lr = 5e-4
-    # Batch_size = 64
-    # Init_Epoch = 0
-    # Epoch = 150
-    # loss_names = ['cls1', 'loc1', 'giou1',
-    #               'cls2', 'loc2', 'giou2',
-    #               'cls3', 'loc3', 'giou3',
-    #               'cls4', 'loc4', 'giou4',
-    #               'cls5', 'loc5', 'giou5']
-    # # loss_names = ['cls1', 'loc1', 'giou1']
-    # freeze_layer = 175
-    #
-    # for i in range(freeze_layer):
-    #     model.layers[i].trainable = False
-    # hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, loss_names=loss_names, max_objects=max_objects) # 0 - 150
-    #
+    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train')
+    if model_path:
+        model.load_weights(model_path, by_name=True, skip_mismatch=False)
+        print('successful load weights from {}'.format(model_path))
+
+    Lr = 5e-4
+    Batch_size = 64
+    Init_Epoch = 0
+    Epoch = 50
+
+    freeze_layer = 175
+
+    for i in range(freeze_layer):
+        model.layers[i].trainable = False
+    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.1, min_scale=1e-2, max_objects=max_objects) # 0 - 150
+
 
     # #----------------------------------------------------#
     # #   train12345
     # #----------------------------------------------------#
-    model = onenet(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train_all')
+    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train')
     if model_path:
-        model.load_weights(model_path, by_name=True, skip_mismatch=True)
+        model.load_weights(model_path, by_name=True, skip_mismatch=False)
+        print('successful load weights from {}'.format(model_path))
+
+    Lr = 5e-4
+    Batch_size = 32
+    Init_Epoch = 150
+    Epoch = 1000 - Init_Epoch
+    freeze_layer = 175
+    for i in range(freeze_layer):
+        model.layers[i].trainable = True
+    # hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.01, min_scale=1e-2, max_objects=max_objects) # 0 - 150
+
+    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train')
+    if model_path:
+        model.load_weights(model_path, by_name=True, skip_mismatch=False)
         print('successful load weights from {}'.format(model_path))
 
     Lr = 5e-6
     Batch_size = 32
-    Init_Epoch = 1650
-    Epoch = 50
-    loss_names = ['cls1', 'loc1', 'giou1',
-                  'cls2', 'loc2', 'giou2',
-                  'cls3', 'loc3', 'giou3',
-                  'cls4', 'loc4', 'giou4',
-                  'cls5', 'loc5', 'giou5']
-    # loss_names = ['cls1', 'loc1', 'giou1']
+    Init_Epoch = 1000
+    Epoch = 1300 - Init_Epoch
     freeze_layer = 175
     for i in range(freeze_layer):
         model.layers[i].trainable = True
-    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, loss_names=loss_names, warmup_proportion=0., min_scale=2e-1, max_objects=max_objects) # 0 - 150
+    model.summary()
+    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.0, min_scale=0., max_objects=max_objects) # 0 - 150

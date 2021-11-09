@@ -9,8 +9,8 @@ from tensorflow.keras.callbacks import (EarlyStopping, ReduceLROnPlateau,
 from tensorflow.keras.optimizers import Adam
 from tqdm import tqdm
 
-from nets.onenet_generator import Generator
-from nets.onenet import centernet
+from nets.data_generator import Generator
+from nets.build_model import centernet
 
 # 防止bug
 def get_train_step_fn():

@@ -10,8 +10,8 @@ from PIL import Image
 from tensorflow.keras.layers import Input
 from tqdm import tqdm
 
-from onenet import OneNet
-from nets.onenet import onenet
+from SSD_with_OneNet import OneNet
+from nets.build_model import build_model
 from utils.utils import onenet_correct_boxes, letterbox_image, nms
 
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
@@ -82,7 +82,7 @@ class mAP_OneNet(OneNet):
         # -----------------------------------------------------------#
         #   将预测结果转换成小数的形式
         # -----------------------------------------------------------#
-        preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
+        # preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
 
         det_label = preds[0][:, -1]
         det_conf = preds[0][:, -2]

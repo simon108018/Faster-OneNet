@@ -17,12 +17,13 @@ class MinCostMatcher(Layer):
 
     def call(self, args, **kwargs):
         cls_pred, loc_pred, cls_true, loc_true, reg_mask = args
-        b, w, h, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
+        b = tf.shape(cls_pred)[0]
+        # b, w, h, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
         m = tf.shape(cls_true)[1]
         cls_true = tf.cast(tf.equal(cls_true, 1), tf.float32)
-        cls_pred = tf.reshape(cls_pred, (b, w * h, c))
-        loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
-        loc_pred = tf.divide(loc_pred, [w, h, w, h])
+        # cls_pred = tf.reshape(cls_pred, (b, w * h, c))
+        # loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
+        # loc_pred = tf.divide(loc_pred, [w, h, w, h])
 
         # cls
 
@@ -31,6 +32,7 @@ class MinCostMatcher(Layer):
         neg_cost_class = (1 - self.alpha) * (cls_prob ** self.gamma) * (-tf.math.log(1 - cls_prob + 1e-8))
         pos_cost_class = self.alpha * ((1 - cls_prob) ** self.gamma) * (-tf.math.log(cls_prob + 1e-8))
         cls_loss = tf.reduce_sum((pos_cost_class - neg_cost_class) * cls_true_, axis=-1)
+
         # loc
         loc_pred_ = tf.expand_dims(loc_pred, 1)
         loc_true_ = tf.expand_dims(loc_true, 2)
@@ -61,10 +63,10 @@ class Focal_loss(Layer):
 
     def call(self, args, **kwargs):
         cls_pred, cls_true, reg_mask, indices = args
-        b, w, h, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2], tf.shape(cls_pred)[3]
-        cls_pred = tf.reshape(cls_pred, (b, w * h, c))
+        b, length, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2]
+        # cls_pred = tf.reshape(cls_pred, (b, w * h, c))
         num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
-        scatter = tf.scatter_nd(indices=indices, updates=reg_mask, shape=[b, w * h, c])
+        scatter = tf.scatter_nd(indices=indices, updates=reg_mask, shape=[b, length, c])
         labels = tf.cast(tf.greater(scatter, 0), tf.float32)
         cls_loss = tf.cond(tf.equal(num_box, 0.),
                            lambda: 0.,
@@ -128,9 +130,9 @@ class Giou_loss(Layer):
 
     def call(self, args, **kwargs):
         loc_pred, loc_true, reg_mask, indices = args
-        b, w, h = tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
-        loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
-        loc_pred = tf.divide(loc_pred, [w, h, w, h])
+        # b, w, h = tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
+        # loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
+        # loc_pred = tf.divide(loc_pred, [w, h, w, h])
         num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
         loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
         giou_loss = tf.cond(tf.equal(num_box, 0),
@@ -149,9 +151,9 @@ class Loc_loss(Layer):
 
     def call(self, args, **kwargs):
         loc_pred, loc_true, reg_mask, indices = args
-        b, w, h = tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
-        loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
-        loc_pred = tf.divide(loc_pred, [w, h, w, h])
+        # b, w, h = tf.shape(loc_pred)[0], tf.shape(loc_pred)[1], tf.shape(loc_pred)[2]
+        # loc_pred = tf.reshape(loc_pred, (b, w * h, 4))
+        # loc_pred = tf.divide(loc_pred, [w, h, w, h])
         num_box = tf.cast(tf.reduce_sum(reg_mask), tf.float32)
         loc_pred_ = tf.gather_nd(params=loc_pred, indices=indices[:, :, :-1])
         reg_loss = tf.cond(tf.equal(num_box, 0),

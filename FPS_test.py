@@ -12,7 +12,7 @@ from PIL import Image
 from tensorflow.keras.layers import Input
 from tqdm import tqdm
 
-from onenet import OneNet
+from SSD_with_OneNet import OneNet
 # from nets.onenet import onenet
 from utils.utils import onenet_correct_boxes, letterbox_image, nms
 

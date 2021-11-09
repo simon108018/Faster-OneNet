@@ -10,8 +10,8 @@ predict.py有几个注意点
 比如判断if predicted_class == 'car': 即可判断当前目标是否为车，然后记录数量即可。利用draw.text即可写字。
 '''
 import os
-from onenet import OneNet
-from PIL import Image
+from SSD_with_OneNet import OneNet
+from PIL import Image, ImageDraw, ImageFont
 import tensorflow as tf
 import time
 import cv2
@@ -106,9 +106,10 @@ if __name__ == "__main__":
         cv2.destroyAllWindows()
 
     elif mode == "fps":
-        test_interval = 100
+        test_interval = 1000
         img = Image.open('img/street.jpg')
         tact_time = onenet.get_FPS(img, test_interval)
         print(str(tact_time) + ' seconds, ' + str(1 / tact_time) + 'FPS, @batch_size 1')
+
     else:
         raise AssertionError("Please specify the correct mode: 'predict', 'video' or 'fps'.")

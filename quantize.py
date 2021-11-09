@@ -10,10 +10,10 @@ from tensorflow.keras.callbacks import (EarlyStopping, ReduceLROnPlateau,
                                         TensorBoard)
 import tensorflow_model_optimization as tfmot
 from utils.utils import ModelCheckpoint
-from nets.onenet_generator import Generator
-from nets.onenet import onenet
+from nets.data_generator import Generator
+from nets.build_model import onenet
 from nets.resnet import apply_ltrb
-from nets.onenet_loss import MinCostMatcher, Focal_loss, Giou_loss, Loc_loss
+from nets.model_loss import MinCostMatcher, Focal_loss, Giou_loss, Loc_loss
 from tensorflow.keras import Input, Model
 import pathlib
 from PIL import Image, ImageDraw, ImageFont

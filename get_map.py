@@ -15,7 +15,7 @@ import numpy as np
 如果想要设定mAP0.x，比如计算mAP0.75，可以设定MINOVERLAP = 0.75。
 '''
 MINOVERLAP = 0.25
-results_files_path = "out34" + "_mAP{:.2f}".format(MINOVERLAP) + "_conf0.1"
+results_files_path = "results" + "_mAP{:.2f}".format(MINOVERLAP) + "_conf0.1"
 parser = argparse.ArgumentParser()
 parser.add_argument('-na', '--no-animation', help="no animation is shown.", action="store_true")
 parser.add_argument('-np', '--no-plot', help="no plot is shown.", action="store_true")
