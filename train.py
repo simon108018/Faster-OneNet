@@ -180,12 +180,12 @@ if __name__ == "__main__":
 
     Lr = 5e-4
     Batch_size = 32
-    Init_Epoch = 150
+    Init_Epoch = 50
     Epoch = 1000 - Init_Epoch
     freeze_layer = 175
     for i in range(freeze_layer):
         model.layers[i].trainable = True
-    # hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.01, min_scale=1e-2, max_objects=max_objects) # 0 - 150
+    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.01, min_scale=1e-2, max_objects=max_objects) # 0 - 150
 
     model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train')
     if model_path:
