@@ -22,7 +22,6 @@ class Generator(object):
         self.train_lines = train_lines
         self.val_lines = val_lines
         self.input_size = input_size
-        # self.output_size = (int(input_size[0]/4), int(input_size[1]/4))
         self.num_classes = num_classes
         self.max_objects = max_objects
 

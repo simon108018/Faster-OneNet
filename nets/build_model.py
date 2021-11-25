@@ -13,14 +13,23 @@ class decode(Layer):
         super(decode, self).__init__(name=name, **kwargs)
         self.max_objects = max_objects
 
+    def build(self, input_shape):
+        self.input_spec = InputSpec(shape=input_shape)
+        self.b = 1
+        self.length = self.input_spec.shape[1]
+        self.c = self.input_spec.shape[2] - 4
+        batch_idx = tf.expand_dims(tf.range(0, self.b), 1)
+        self.batch_idx = tf.tile(batch_idx, (1, self.max_objects))
+
     def get_config(self):
         config = super(decode, self).get_config()
+        config.update({'max_objects': self.max_objects})
         return config
 
-    def call(self, cls_pred, loc_pred, **kwargs):
+    def call(self, preds, **kwargs):
+        cls_pred = preds[:,:,4:]
+        loc_pred = preds[:,:,:4]
         scores, indices, class_ids = self.topk(cls_pred)
-        b = tf.shape(cls_pred)[0]
-        length = tf.shape(cls_pred)[1]
         # -----------------------------------------------------#
         #   loc         b, 128 * 128, 4
         # -----------------------------------------------------#
@@ -32,15 +41,13 @@ class decode(Layer):
         #   batch_idx   b, max_objects
         # -----------------------------------------------------#
 
+        full_indices = tf.reshape(self.batch_idx, [-1]) * tf.cast(self.length, tf.int32) + tf.reshape(indices, [-1])
 
-        batch_idx = tf.expand_dims(tf.range(0, b), 1)
-        batch_idx = tf.tile(batch_idx, (1, self.max_objects))
-        full_indices = tf.reshape(batch_idx, [-1]) * tf.cast(length, tf.int32) + tf.reshape(indices, [-1])
         # -----------------------------------------------------#
         #   取出top_k个框对应的参数
         # -----------------------------------------------------#
         topk_loc = tf.gather(tf.reshape(loc_pred, [-1, 4]), full_indices)
-        topk_loc = tf.reshape(topk_loc, [b, -1, 4])
+        topk_loc = tf.reshape(topk_loc, [self.b, -1, 4])
 
         # -----------------------------------------------------#
         #   计算预测框左上角和右下角
@@ -72,7 +79,6 @@ class decode(Layer):
         #   h , w = 輸出的長寬 , num_classes = 20
         #   找出得分最大的特徵點
         # -------------------------------------------------------------------------#
-        b, length, c = tf.shape(cls_pred)[0], tf.shape(cls_pred)[1], tf.shape(cls_pred)[2]
         # -------------------------------------------#
         #   将所有结果平铺，获得(b, length * c)
         # -------------------------------------------#
@@ -80,34 +86,28 @@ class decode(Layer):
         # -----------------------------#
         #   (b, k), (b, k)
         # -----------------------------#
-        scores, indices = tf.math.top_k(cls_pred, k=self.max_objects, sorted=True)
+        scores, indices = tf.math.top_k(cls_pred, k=self.max_objects, sorted=False)
         # --------------------------------------#
         #   計算求出種類、網格點以及索引。
         # --------------------------------------#
-        class_ids = indices % c
-        indices = indices // c
+        class_ids = indices % self.c
+        indices = indices // self.c
         return scores, indices, class_ids
 
-    def get_config(self):
-        config = super(decode, self).get_config()
-        config.update({'alpha': self.alpha,
-                       'gamma': self.gamma,
-                       'batch_idx': self.batch_idx})
-        return config
 
 
 
 
 
 def build_model(input_shape, num_classes, structure='onenet', backbone='resnet50',
-                max_objects=100, mode="train", shortcut=True, prior_prob=0.01, alpha=0.25, gamma=2.0):
+                max_objects=100, mode="train", shortcut=True, prior_prob=0.01, alpha=0.25, gamma=2.0, output_layers=6):
     assert backbone.lower() in ['resnet18', 'resnet50']
     assert structure.lower() in ['onenet', 'ssd_onenet']
     input_tensor = Input(shape=input_shape, name="image_input")
     if structure.lower()=='onenet':
-        net = onenet_head(input_tensor, num_classes, prior_prob, backbone='resnet50')
+        net = onenet_head(input_tensor, num_classes, prior_prob, backbone)
     elif structure.lower()=='ssd_onenet':
-        net = ssd_onenet_head(input_tensor, num_classes, prior_prob)
+        net = ssd_onenet_head(input_tensor, num_classes, prior_prob, backbone, output_layers)
     # --------------------------------------------------------------------------------------------------------#
     #   对获取到的特征进行上采样，进行分类预测和回归预测
     #   16, 16, 1024 -> 32, 32, 256 -> 64, 64, 128 -> 128, 128, 64 -> 128, 128, 64 -> 128, 128, num_classes
@@ -130,11 +130,8 @@ def build_model(input_shape, num_classes, structure='onenet', backbone='resnet50
                       outputs=[net['cls_cost'], net['reg_cost'], net['giou_cost']])
         return model
     else:
-        detection = decode(max_objects=max_objects, name='detections')(net['cls_pred'], net['loc_pred'])
+        net['preds'] = Concatenate(axis=-1, name='preds')([net['loc_pred'], net['cls_pred']])
+        detection = decode(max_objects=max_objects, name='detections')(net['preds'])
         prediction_model = Model(inputs=net['input'], outputs=detection)
-        # prediction_model = Model(inputs=net['input'], outputs=[net['cls_pred'], net['loc_pred']])
-        # return prediction_model
-        # net['predictions'] = Concatenate(axis=2, name='predictions')([net['cls_pred'],
-        #                            net['loc_pred']])
-        # prediction_model = Model(inputs=net['input'], outputs=net['predictions'])
+        # prediction_model = Model(inputs=net['input'], outputs=[net['preds']])
         return prediction_model

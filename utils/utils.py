@@ -150,6 +150,8 @@ def gaussian_radius(det_size, min_overlap=0.7):
     return min(r1, r2, r3)
 
 
+
+
 class ModelCheckpoint(tf.keras.callbacks.Callback):
     def __init__(self, filepath, monitor='val_loss', verbose=0,
                  save_best_only=False, save_weights_only=False,
@@ -186,6 +188,26 @@ class ModelCheckpoint(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
         self.epochs_since_last_save += 1
+
+        lr_t = self.model.optimizer._decayed_lr(tf.float32)
+        local_step = tf.cast(self.model.optimizer.iterations + 1, tf.float32)
+
+        if self.model.optimizer._initial_total_steps > 0:
+            total_steps = self.model.optimizer._get_hyper("total_steps", tf.float32)
+            warmup_steps = total_steps * self.model.optimizer._get_hyper("warmup_proportion", tf.float32)
+            min_lr = self.model.optimizer._get_hyper("min_lr", tf.float32)
+            decay_steps = tf.maximum(total_steps - warmup_steps, 1)
+            decay_rate = (min_lr - lr_t) / decay_steps
+            lr_t = tf.where(
+                local_step <= warmup_steps,
+                lr_t * (local_step / warmup_steps),
+                lr_t + decay_rate * tf.minimum(local_step - warmup_steps, decay_steps),
+            )
+            if local_step <= warmup_steps:
+                print('The learning rate has warmed up to {}.'.format(lr_t.numpy()))
+            else:
+                print('The learning rate has decayed to {}'.format(lr_t.numpy()))
+
         if self.epochs_since_last_save >= self.period:
             self.epochs_since_last_save = 0
             filepath = self.filepath.format(epoch=epoch + 1, **logs)

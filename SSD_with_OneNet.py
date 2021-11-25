@@ -35,20 +35,23 @@ def preprocess_image(image):
 # --------------------------------------------#
 class OneNet(object):
     _defaults = {
-        "model_path": 'model_data/ep1500-loss1.156-val_loss1.448.h5',
+        # "model_path": 'model_data/6outputs_nogiou.h5', "output_layers": 6,
+        # "model_path": 'model_data/myweight.h5', "output_layers": 6,
+        # "model_path": 'model_data/4outputs.h5', "output_layers": 4,
         "classes_path": 'model_data/voc_classes.txt',
-        "structure": 'onenet',
-        "backbone": 'resnet18',
+        "structure": 'ssd_onenet',
+        "backbone": 'resnet50',
+        "output_layers": 2,
         "input_shape": [320, 320, 3],
         "confidence": 0.2,
-        "max_objects": 20,
+        "max_objects": 100,
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
         # 也可以根据检测效果自行选择
-        "nms": True,
+        "nms": False,
         "nms_threhold": 0.4,
         "use_quantization": False,
-        "letterbox_image":True
+        "letterbox_image":False
     }
 
 
@@ -87,9 +90,11 @@ class OneNet(object):
                                  structure=self.structure,
                                  backbone=self.backbone,
                                  max_objects=self.max_objects,
-                                 mode='predict')
-        # self.model.load_weights(self.model_path, by_name=True, skip_mismatch=True)
-        # print('{} model, anchors, and classes loaded.'.format(self.model_path))
+                                 mode='predict',
+                                 output_layers=self.output_layers if hasattr(self, "output_layers") else None)
+        if hasattr(self, "model_path"):
+            self.model.load_weights(self.model_path, by_name=True, skip_mismatch=True)
+            print('{} model, anchors, and classes loaded.'.format(self.model_path))
 
         # 画框设置不同的颜色
         hsv_tuples = [(x / len(self.class_names), 1., 1.)
@@ -297,6 +302,7 @@ class OneNet(object):
             top_ymin = top_ymin * image_shape[0]
             top_xmax = top_xmax * image_shape[1]
             top_ymax = top_ymax * image_shape[0]
+
             boxes = np.concatenate([top_ymin,top_xmin,top_ymax,top_xmax], axis=-1)
 
 
@@ -363,13 +369,10 @@ class OneNet(object):
         photo = preprocess_image(np.reshape(photo, [1, self.input_shape[0], self.input_shape[1], self.input_shape[2]]))
 
         preds = self.get_pred(photo).numpy()
-        # preds = self.decode(preds)
         if self.nms:
             preds = np.array(nms(preds, self.nms_threhold))
-            # preds = np.array(nms(preds, self.nms_threhold))
 
         if len(preds[0]) > 0:
-            # preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
 
             det_label = preds[0][:, -1]
             det_conf = preds[0][:, -2]
@@ -395,16 +398,11 @@ class OneNet(object):
         t1 = time.time()
         # tt = 0
         for _ in range(test_interval):
-            # t3 = time.time()
             preds = self.get_pred(photo).numpy()
-            preds = self.decode(preds)
-            # t4 = time.time()
-            # tt += t4-t3
             if self.nms:
                 preds = np.array(nms(preds, self.nms_threhold))
 
             if len(preds[0]) > 0:
-                # preds[0][:, 0:4] = preds[0][:, 0:4] / self.input_shape[0]
 
                 det_label = preds[0][:, -1]
                 det_conf = preds[0][:, -2]
@@ -425,63 +423,6 @@ class OneNet(object):
                     top_xmax = top_xmax * image_shape[1]
                     top_ymax = top_ymax * image_shape[0]
                     boxes = np.concatenate([top_ymin, top_xmin, top_ymax, top_xmax], axis=-1)
-
-        t2 = time.time()
-        tact_time = (t2 - t1) / test_interval
-        # tact_time_ = tt / test_interval
-        return tact_time
-
-    def get_FPS2(self, image, test_interval):
-        image = image.convert('RGB')
-        image_shape = np.array(np.shape(image)[0:2])
-        # ---------------------------------------------------------#
-        #   给图像增加灰条，实现不失真的resize
-        # ---------------------------------------------------------#
-        if self.letterbox_image:
-            crop_img = letterbox_image(image, [self.input_shape[0], self.input_shape[1]])
-        else:
-            crop_img = image.resize((self.input_shape[1], self.input_shape[0]), Image.BICUBIC)
-        # ----------------------------------------------------------------------------------#
-        #   将RGB转化成BGR，这是因为原始的centernet_hourglass权值是使用BGR通道的图片训练的
-        # ----------------------------------------------------------------------------------#
-        photo = np.array(crop_img, dtype=np.float32)
-        # -----------------------------------------------------------#
-        #   图片预处理，归一化。获得的photo的shape为[1, 512, 512, 3]
-        # -----------------------------------------------------------#
-        photo = preprocess_image(np.reshape(photo, [1, self.input_shape[0], self.input_shape[1], 3]))
-        preds = self.get_pred(photo).numpy()
-        preds = self.decode(preds)
-        if self.nms:
-            preds = np.array(nms(preds, self.nms_threhold))
-            # preds = np.array(nms(preds, self.nms_threhold))
-
-        if len(preds[0]) > 0:
-
-            det_label = preds[0][:, -1]
-            det_conf = preds[0][:, -2]
-            det_xmin, det_ymin, det_xmax, det_ymax = preds[0][:, 0], preds[0][:, 1], preds[0][:, 2], preds[0][:, 3]
-
-            top_indices = [i for i, conf in enumerate(det_conf) if conf >= self.confidence]
-            top_conf = det_conf[top_indices]
-            top_label_indices = det_label[top_indices].tolist()
-            top_xmin, top_ymin, top_xmax, top_ymax = np.expand_dims(det_xmin[top_indices], -1), np.expand_dims(
-                det_ymin[top_indices], -1), np.expand_dims(det_xmax[top_indices], -1), np.expand_dims(
-                det_ymax[top_indices], -1)
-            if self.letterbox_image:
-                boxes = onenet_correct_boxes(top_ymin, top_xmin, top_ymax, top_xmax,
-                                             np.array([self.input_shape[0], self.input_shape[1]]), image_shape)
-            else:
-                top_xmin = top_xmin * image_shape[1]
-                top_ymin = top_ymin * image_shape[0]
-                top_xmax = top_xmax * image_shape[1]
-                top_ymax = top_ymax * image_shape[0]
-                boxes = np.concatenate([top_ymin, top_xmin, top_ymax, top_xmax], axis=-1)
-
-
-        t1 = time.time()
-        for _ in range(test_interval):
-            preds = self.get_pred(photo).numpy()
-
 
         t2 = time.time()
         tact_time = (t2 - t1) / test_interval

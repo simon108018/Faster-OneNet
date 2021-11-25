@@ -68,7 +68,7 @@ if __name__ == "__main__":
     #-----------------------------#
     backbone = "resnet50"
     max_objects = 40
-
+    output_layers = 4
     #------------------------------------------------------#
     #   权值文件请看README，百度网盘下载
     #   训练自己的数据集时提示维度不匹配正常
@@ -153,7 +153,8 @@ if __name__ == "__main__":
     #----------------------------------------------------#
     #   freeze
     #----------------------------------------------------#
-    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train')
+    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train', output_layers=output_layers)
+    model_path = new_log(path)
     if model_path:
         model.load_weights(model_path, by_name=True, skip_mismatch=False)
         print('successful load weights from {}'.format(model_path))
@@ -167,37 +168,25 @@ if __name__ == "__main__":
 
     for i in range(freeze_layer):
         model.layers[i].trainable = False
-    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.1, min_scale=1e-2, max_objects=max_objects) # 0 - 150
+    # hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.1, min_scale=1e-2, max_objects=max_objects) # 0 - 150
 
 
     # #----------------------------------------------------#
     # #   train12345
     # #----------------------------------------------------#
-    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train')
+    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train', output_layers=output_layers)
+    model_path = new_log(path)
     if model_path:
         model.load_weights(model_path, by_name=True, skip_mismatch=False)
         print('successful load weights from {}'.format(model_path))
 
     Lr = 5e-4
     Batch_size = 32
-    Init_Epoch = 50
-    Epoch = 1000 - Init_Epoch
+    Init_Epoch = 500
+    Epoch = 2000 - Init_Epoch
     freeze_layer = 175
     for i in range(freeze_layer):
         model.layers[i].trainable = True
-    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.01, min_scale=1e-2, max_objects=max_objects) # 0 - 150
+    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.1, min_scale=1e-2, max_objects=max_objects) # 0 - 150
 
-    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train')
-    if model_path:
-        model.load_weights(model_path, by_name=True, skip_mismatch=False)
-        print('successful load weights from {}'.format(model_path))
 
-    Lr = 5e-6
-    Batch_size = 32
-    Init_Epoch = 1000
-    Epoch = 1300 - Init_Epoch
-    freeze_layer = 175
-    for i in range(freeze_layer):
-        model.layers[i].trainable = True
-    model.summary()
-    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.0, min_scale=0., max_objects=max_objects) # 0 - 150

@@ -71,9 +71,10 @@ def ResNet18(image_input=tf.keras.Input(shape=(512,512,3))):
     model.load_weights('./my_ResNet_18.h5')
     net['input'] = model.inputs
 
-    net['o1'] = model.get_layer('stage2_b').output
-    net['o2'] = model.get_layer('stage3_b').output
-    net['o3'] = model.get_layer('stage4_b').output
+    net['o1'] = model.get_layer('stage1_b').output
+    net['o2'] = model.get_layer('stage2_b').output
+    net['o3'] = model.get_layer('stage3_b').output
+    net['o4'] = model.get_layer('stage4_b').output
 
     return net
 
@@ -83,12 +84,14 @@ def ResNet50(image_input=Input(shape=(300, 300, 3))):
     net = {}
     model = tf.keras.applications.ResNet50(include_top=False, input_tensor=image_input)
     net['input'] = model.inputs
-    #  38, 38,  512
-    net['o1'] = model.get_layer('conv3_block4_out').output
-    #  19, 19, 1024
-    net['o2'] = model.get_layer('conv4_block6_out').output
+    #  80, 80,  256
+    net['o1'] = model.get_layer('conv2_block3_out').output
+    #  40, 40,  512
+    net['o2'] = model.get_layer('conv3_block4_out').output
+    #  20, 20, 1024
+    net['o3'] = model.get_layer('conv4_block6_out').output
     #  10, 10, 2048
-    net['o3'] = model.get_layer('conv5_block3_out').output
+    net['o4'] = model.get_layer('conv5_block3_out').output
     return net
 
 
@@ -97,24 +100,14 @@ def Backbone(image_input=tf.keras.Input(shape=(512, 512, 3)), backbone_name='res
         net = ResNet18(image_input)
     elif backbone_name.lower() == 'resnet50':
         net = ResNet50(image_input)
-    #  10, 10, 2048 >> 5, 5, 256 (input=(300,300,3)) 1
-    #  16, 16, 2048 >> 8, 8, 256 (input=(512,512,3)) 2
-    net['o4_conv1x1'] = Conv2D(128, kernel_size=(1,1), activation='relu',
-                               padding='same',
-                               name='o4_conv1x1')(net['o3'])
-    net['o4'] = Conv2D(256, kernel_size=(3, 3), strides=(2, 2),
-                               activation='relu', padding='same',
-                               name='o4_conv3x3')(net['o4_conv1x1'])
-    #  5, 5, 256 >> 3, 3, 256
-    #  8, 8, 256 >> 4, 4, 256
+    #  10, 10, 2048 >> 5, 5, 256 (input=(320,320,3))
     net['o5_conv1x1'] = Conv2D(128, kernel_size=(1, 1), activation='relu',
                                padding='same',
                                name='o5_conv1x1')(net['o4'])
     net['o5'] = Conv2D(256, kernel_size=(3, 3), strides=(2, 2),
                                activation='relu', padding='same',
                                name='o5_conv3x3')(net['o5_conv1x1'])
-    # 3, 3, 256 >> 1, 1, 256
-    # 4, 4, 256 >> 2, 2, 256
+    # 5, 5, 256 >> 3, 3, 256
     net['o6_conv1x1'] = Conv2D(128, kernel_size=(1, 1), activation='relu',
                                padding='same',
                                name='o6_conv1x1')(net['o5'])

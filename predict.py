@@ -17,8 +17,9 @@ import time
 import cv2
 import numpy as np
 
-device_type = 'CPU'
+device_type = 'GPU'
 if device_type=='GPU':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -106,10 +107,14 @@ if __name__ == "__main__":
         cv2.destroyAllWindows()
 
     elif mode == "fps":
-        test_interval = 1000
-        img = Image.open('img/street.jpg')
-        tact_time = onenet.get_FPS(img, test_interval)
-        print(str(tact_time) + ' seconds, ' + str(1 / tact_time) + 'FPS, @batch_size 1')
+        tact_time = []
+        for _ in range(50):
+            test_interval = 20
+            img = Image.open('img/street.jpg')
+            tact_time.append(onenet.get_FPS(img, test_interval))
+        print("mean:\n", str(np.mean(tact_time)) + ' seconds, ' + str(np.mean(1 / np.asarray(tact_time))) + 'FPS, @batch_size 1')
+        print("median:\n", str(np.median(tact_time)) + ' seconds, ' + str(np.median(1 / np.asarray(tact_time))) + 'FPS, @batch_size 1')
+        print("std:\n", str(np.std(tact_time)) + ' seconds, ' + str(np.std(1 / np.asarray(tact_time))) + 'FPS, @batch_size 1')
 
     else:
         raise AssertionError("Please specify the correct mode: 'predict', 'video' or 'fps'.")
