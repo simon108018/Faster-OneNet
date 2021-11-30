@@ -81,7 +81,6 @@ if __name__ == "__main__":
         path +='/resnet50'.format(structure)
     elif backbone == "resnet18":
         path +='/resnet50'.format(structure)
-
     if not os.path.isdir(path):
         os.mkdir(path)
     model_path = new_log(path)
@@ -160,33 +159,11 @@ if __name__ == "__main__":
         print('successful load weights from {}'.format(model_path))
 
     Lr = 5e-4
-    Batch_size = 64
+    Batch_size = 28
     Init_Epoch = 0
-    Epoch = 50
+    Epoch = 1000
 
-    freeze_layer = 175
+    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.01, min_scale=1e-2, max_objects=max_objects) # 0 - 150
 
-    for i in range(freeze_layer):
-        model.layers[i].trainable = False
-    # hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.1, min_scale=1e-2, max_objects=max_objects) # 0 - 150
-
-
-    # #----------------------------------------------------#
-    # #   train12345
-    # #----------------------------------------------------#
-    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train', output_layers=output_layers)
-    model_path = new_log(path)
-    if model_path:
-        model.load_weights(model_path, by_name=True, skip_mismatch=False)
-        print('successful load weights from {}'.format(model_path))
-
-    Lr = 5e-4
-    Batch_size = 32
-    Init_Epoch = 500
-    Epoch = 2000 - Init_Epoch
-    freeze_layer = 175
-    for i in range(freeze_layer):
-        model.layers[i].trainable = True
-    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.1, min_scale=1e-2, max_objects=max_objects) # 0 - 150
 
 

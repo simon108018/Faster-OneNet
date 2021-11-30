@@ -41,7 +41,7 @@ class OneNet(object):
         "classes_path": 'model_data/voc_classes.txt',
         "structure": 'ssd_onenet',
         "backbone": 'resnet50',
-        "output_layers": 2,
+        "output_layers": 4,
         "input_shape": [320, 320, 3],
         "confidence": 0.2,
         "max_objects": 100,

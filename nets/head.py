@@ -65,16 +65,16 @@ def ssd_onenet_head(input_tensor = Input(shape=(300, 300, 3)), num_classes=20, p
     ## o1
 
     # o1 = BatchNormalization(name='o1_bn')(o1)
-    # cls1 header (38*38*20)
+    # cls1 header (80*80*20)
     if output_layers >= 1:
-        net['cls1_conv'] = Conv2D(num_classes, 3, padding='same',
+        net['cls1_conv'] = Conv2D(num_classes, 1, padding='same',
                                   kernel_initializer='glorot_uniform',
                                   kernel_regularizer=l2(5e-4),
                                   bias_initializer=initializers.Constant(value=bias_value),
                                   name='cls1_conv')(net['o1'])
         net['cls1_flatten'] = Flatten(name='cls1_flatten')(net['cls1_conv'])
-        # loc1 header (38*38*4)
-        net['relative_loc1'] = Conv2D(4, 3, padding='same',
+        # loc1 header (80*80*4)
+        net['relative_loc1'] = Conv2D(4, 1, padding='same',
                                       kernel_initializer='glorot_uniform',
                                       kernel_regularizer=l2(5e-4),
                                       # bias_initializer=initializers.Constant(value=loc_bias_value),
@@ -87,14 +87,14 @@ def ssd_onenet_head(input_tensor = Input(shape=(300, 300, 3)), num_classes=20, p
     ## o2
     if output_layers >= 2:
         # cls2 header (19*19*20)
-        net['cls2_conv'] = Conv2D(num_classes, 3, padding='same',
+        net['cls2_conv'] = Conv2D(num_classes, 1, padding='same',
                                   kernel_initializer='glorot_uniform',
                                   kernel_regularizer=l2(5e-4),
                                   bias_initializer=initializers.Constant(value=bias_value),
                                   name='cls2_conv')(net['o2'])
         net['cls2_flatten'] = Flatten(name='cls2_flatten')(net['cls2_conv'])
         # loc2 header (19*19*4)
-        net['relative_loc2'] = Conv2D(4, 3, padding='same',
+        net['relative_loc2'] = Conv2D(4, 1, padding='same',
                                       kernel_initializer='glorot_uniform',
                                       kernel_regularizer=l2(5e-4),
                                       # bias_initializer=initializers.Constant(value=loc_bias_value),
@@ -108,14 +108,14 @@ def ssd_onenet_head(input_tensor = Input(shape=(300, 300, 3)), num_classes=20, p
     ## o3
     if output_layers >= 3:
         # cls3 header (10*10*20)
-        net['cls3_conv'] = Conv2D(num_classes, 3, padding='same',
+        net['cls3_conv'] = Conv2D(num_classes, 1, padding='same',
                                   kernel_initializer='glorot_uniform',
                                   kernel_regularizer=l2(5e-4),
                                   bias_initializer=initializers.Constant(value=bias_value),
                                   name='cls3_conv')(net['o3'])
         net['cls3_flatten'] = Flatten(name='cls3_flatten')(net['cls3_conv'])
         # loc3 header (10*10*4)
-        net['relative_loc3'] = Conv2D(4, 3, padding='same',
+        net['relative_loc3'] = Conv2D(4, 1, padding='same',
                                       kernel_initializer='glorot_uniform',
                                       kernel_regularizer=l2(5e-4),
                                       # bias_initializer=initializers.Constant(value=loc_bias_value),
@@ -128,14 +128,14 @@ def ssd_onenet_head(input_tensor = Input(shape=(300, 300, 3)), num_classes=20, p
     ## o4
     if output_layers >= 4:
         # cls4 header (5*5*20)
-        net['cls4_conv'] = Conv2D(num_classes, 3, padding='same',
+        net['cls4_conv'] = Conv2D(num_classes, 1, padding='same',
                                   kernel_initializer='glorot_uniform',
                                   kernel_regularizer=l2(5e-4),
                                   bias_initializer=initializers.Constant(value=bias_value),
                                   name='cls4_conv')(net['o4'])
         net['cls4_flatten'] = Flatten(name='cls4_flatten')(net['cls4_conv'])
         # loc4 header (5*5*4)
-        net['relative_loc4'] = Conv2D(4, 3, padding='same',
+        net['relative_loc4'] = Conv2D(4, 1, padding='same',
                                       kernel_initializer='glorot_uniform',
                                       kernel_regularizer=l2(5e-4),
                                       # bias_initializer=initializers.Constant(value=loc_bias_value),
@@ -147,14 +147,14 @@ def ssd_onenet_head(input_tensor = Input(shape=(300, 300, 3)), num_classes=20, p
     ## o5
     if output_layers >= 5:
         # cls5 header (3*3*20)
-        net['cls5_conv'] = Conv2D(num_classes, 3, padding='same',
+        net['cls5_conv'] = Conv2D(num_classes, 1, padding='same',
                                   kernel_initializer='glorot_uniform',
                                   kernel_regularizer=l2(5e-4),
                                   bias_initializer=initializers.Constant(value=bias_value),
                                   name='cls5_conv')(net['o5'])
         net['cls5_flatten'] = Flatten(name='cls5_flatten')(net['cls5_conv'])
         # loc5 header (3*3*4)
-        net['relative_loc5'] = Conv2D(4, 3, padding='same',
+        net['relative_loc5'] = Conv2D(4, 1, padding='same',
                                       kernel_initializer='glorot_uniform',
                                       kernel_regularizer=l2(5e-4),
                                       # bias_initializer=initializers.Constant(value=loc_bias_value),
@@ -167,14 +167,14 @@ def ssd_onenet_head(input_tensor = Input(shape=(300, 300, 3)), num_classes=20, p
     ## o6
     if output_layers >= 6:
         # cls6 header (1*1*20)
-        net['cls6_conv'] = Conv2D(num_classes, 3, padding='same',
+        net['cls6_conv'] = Conv2D(num_classes, 1, padding='same',
                                   bias_initializer=initializers.Constant(value=bias_value),
                                   kernel_initializer='glorot_uniform',
                                   kernel_regularizer=l2(5e-4),
                                   name='cls6_conv')(net['o6'])
         net['cls6_flatten'] = Flatten(name='cls6_flatten')(net['cls6_conv'])
         # loc6 header (1*1*4)
-        net['relative_loc6'] = Conv2D(4, 3, padding='same',
+        net['relative_loc6'] = Conv2D(4, 1, padding='same',
                                       kernel_initializer='glorot_uniform',
                                       kernel_regularizer=l2(5e-4),
                                       # bias_initializer=initializers.Constant(value=loc_bias_value),
