@@ -35,21 +35,19 @@ def preprocess_image(image):
 # --------------------------------------------#
 class OneNet(object):
     _defaults = {
-        # "model_path": 'model_data/6outputs_nogiou.h5', "output_layers": 6,
-        # "model_path": 'model_data/myweight.h5', "output_layers": 6,
-        # "model_path": 'model_data/4outputs.h5', "output_layers": 4,
+        "model_path": 'model_data/onenet_2outputs.h5',
         "classes_path": 'model_data/voc_classes.txt',
         "structure": 'ssd_onenet',
         "backbone": 'resnet50',
-        "output_layers": 4,
+        "output_layers": 2,
         "input_shape": [320, 320, 3],
-        "confidence": 0.2,
+        "confidence": 0.1,
         "max_objects": 100,
         # backbone为resnet50时建议设置为True
         # backbone为hourglass时建议设置为False
         # 也可以根据检测效果自行选择
-        "nms": False,
-        "nms_threhold": 0.4,
+        "nms": True,
+        "nms_threhold": 0.2,
         "use_quantization": False,
         "letterbox_image":False
     }

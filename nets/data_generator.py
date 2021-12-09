@@ -24,6 +24,7 @@ class Generator(object):
         self.input_size = input_size
         self.num_classes = num_classes
         self.max_objects = max_objects
+        np.random.seed(123)
 
     def get_random_data(self, annotation_line, input_shape, jitter=.3, hue=.1, sat=1.5, val=1.5, random=True):
         '''r实时数据增强的随机预处理'''

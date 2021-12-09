@@ -14,7 +14,7 @@ import numpy as np
 代码克隆自https://github.com/Cartucho/mAP
 如果想要设定mAP0.x，比如计算mAP0.75，可以设定MINOVERLAP = 0.75。
 '''
-MINOVERLAP = 0.5
+MINOVERLAP = 0.50
 results_files_path = "results" + "6outputs_nogiou_mAP{:.2f}".format(MINOVERLAP) + "_conf0.1"
 parser = argparse.ArgumentParser()
 parser.add_argument('-na', '--no-animation', help="no animation is shown.", action="store_true")

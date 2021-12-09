@@ -214,7 +214,7 @@ def onenet_head(input_tensor = Input(shape=(512, 512, 3)), num_classes=20, prior
     for i in range(len(o)):
         # 进行上采样
         x = Conv2DTranspose(num_filters // pow(2, i), (4, 4), strides=2, use_bias=False, padding='same',
-                            kernel_initializer='he_normal',
+                            kernel_initializer='glorot_uniform',
                             kernel_regularizer=l2(5e-4),
                             name='Dconv_{}'.format(o[i]))(x)
         x = BatchNormalization(name='Dconv_{}_bn'.format(o[i]))(x)
@@ -226,13 +226,13 @@ def onenet_head(input_tensor = Input(shape=(512, 512, 3)), num_classes=20, prior
     bias_value = -np.log((1 - prior_prob) / prior_prob)
     y1 = Conv2D(64, 3, padding='same',
                 use_bias=False,
-                kernel_initializer='he_normal',
+                kernel_initializer='glorot_uniform',
                 kernel_regularizer=l2(5e-4),
                 name='cls_conv1')(x)
     y1 = BatchNormalization(name='cls_bn')(y1)
     y1 = Activation('relu', name='cls_relu')(y1)
     y1 = Conv2D(num_classes, 3,
-                             kernel_initializer='he_normal',
+                             kernel_initializer='glorot_uniform',
                              kernel_regularizer=l2(5e-4),
                              bias_initializer=initializers.Constant(value=bias_value),
                              activation='sigmoid',
@@ -241,13 +241,13 @@ def onenet_head(input_tensor = Input(shape=(512, 512, 3)), num_classes=20, prior
     # loc header (128*128*4)
     y2 = Conv2D(64, 3, padding='same',
                 use_bias=False,
-                kernel_initializer='he_normal',
+                kernel_initializer='glorot_uniform',
                 kernel_regularizer=l2(5e-4),
                 name='loc_conv1')(x)
     y2 = BatchNormalization(name='loc_bn')(y2)
     y2 = Activation('relu', name='loc_relu')(y2)
     loc = Conv2D(4, 3,
-                 kernel_initializer='he_normal',
+                 kernel_initializer='glorot_uniform',
                  kernel_regularizer=l2(5e-4),
                  activation='relu',
                  name='loc_conv2')(y2)

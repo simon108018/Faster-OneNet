@@ -68,7 +68,7 @@ if __name__ == "__main__":
     #-----------------------------#
     backbone = "resnet50"
     max_objects = 40
-    output_layers = 4
+    output_layers = 2
     #------------------------------------------------------#
     #   权值文件请看README，百度网盘下载
     #   训练自己的数据集时提示维度不匹配正常
@@ -113,6 +113,7 @@ if __name__ == "__main__":
         #   early_stopping用于设定早停，val_loss多次不下降自动结束训练，表示模型基本收敛
         # -------------------------------------------------------------------------------#
         logs = path + '/' + datetime.now().strftime("%Y%m%d-%H%M%S")
+        # logs = path + '/20211207-063814'
         logging = TensorBoard(log_dir=logs, profile_batch=(2,5))
         checkpoint = ModelCheckpoint(path+'/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
@@ -158,12 +159,23 @@ if __name__ == "__main__":
         model.load_weights(model_path, by_name=True, skip_mismatch=False)
         print('successful load weights from {}'.format(model_path))
 
-    Lr = 5e-4
-    Batch_size = 28
+    Lr = 5e-5
+    Batch_size = 12
     Init_Epoch = 0
-    Epoch = 1000
+    Epoch = 500
 
-    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.01, min_scale=1e-2, max_objects=max_objects) # 0 - 150
+    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.01, min_scale=1, max_objects=max_objects)
 
+    Lr = 5e-6
+    Batch_size = 12
+    Init_Epoch = 500
+    Epoch = 300
 
+    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.0, min_scale=1, max_objects=max_objects)
 
+    Lr = 5e-7
+    Batch_size = 12
+    Init_Epoch = 800
+    Epoch = 200
+
+    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.0, min_scale=1, max_objects=max_objects)

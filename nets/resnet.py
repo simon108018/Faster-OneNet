@@ -80,7 +80,7 @@ def ResNet18(image_input=tf.keras.Input(shape=(512,512,3))):
 
 
 
-def ResNet50(image_input=Input(shape=(300, 300, 3))):
+def ResNet50(image_input=Input(shape=(320, 320, 3))):
     net = {}
     model = tf.keras.applications.ResNet50(include_top=False, input_tensor=image_input)
     net['input'] = model.inputs
