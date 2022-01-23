@@ -68,7 +68,7 @@ def ResNet18_model(image_input=tf.keras.Input(shape=(512, 512, 3))) -> tf.keras.
 def ResNet18(image_input=tf.keras.Input(shape=(512,512,3))):
     net = {}
     model = ResNet18_model(image_input)
-    model.load_weights('./my_ResNet_18.h5')
+    model.load_weights('./ResNet_18.h5')
     net['input'] = model.inputs
 
     net['o1'] = model.get_layer('stage1_b').output
