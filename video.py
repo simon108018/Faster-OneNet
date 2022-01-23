@@ -11,7 +11,7 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 
-from Faster_OneNet import CenterNet
+from OneNet import CenterNet
 
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
 for gpu in gpus:

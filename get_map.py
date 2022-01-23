@@ -5,7 +5,7 @@ import tensorflow as tf
 from PIL import Image
 from tqdm import tqdm
 
-from Faster_OneNet import OneNet
+from OneNet import OneNet
 from utils.utils import get_classes
 from utils.utils_map import get_coco_map, get_map, get_coco_test_json
 

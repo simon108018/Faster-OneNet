@@ -109,55 +109,7 @@ def count_anchor_size(output_layers=4, min_size=0.2,max_size=0.9):
 
     return anchor_size
 
-def faster_onenet_head(input_tensor = Input(shape=(300, 300, 3)), num_classes=20, prior_prob=0.01, backbone='resnet50'):
-    # ---------------------------------#
-    #   典型的输入大小为[300,300,3]
-    # ---------------------------------#
-    # net变量里面包含了整个SSD的结构，通过层名可以找到对应的特征层
-    net = Backbone(input_tensor, backbone_name=backbone)
-    bias_value = -np.log((1 - prior_prob) / prior_prob)
-    anchorsize =  [[0.2, 0.2],
-                      [0.5, 0.5],
-                      [0.8, 0.8]]
-    num_anchors = len(anchorsize)
-    cls_concate_list = []
-    loc_concate_list = []
-    # conv
-    net['final_conv'] = Conv2D(64, 3, padding='same',
-                                           kernel_initializer='glorot_uniform',
-                                           kernel_regularizer=l2(5e-4),
-                                           bias_initializer=initializers.Constant(value=bias_value),
-                                           name='final_conv')(net['o4'])
-    net['final_bn'] = BatchNormalization(name='final_bn')(net['final_conv'])
-    net['final_relu'] = Activation('relu', name='final_relu')(net['final_bn'])
-    for i in range(1, num_anchors+1):
-        # cls header (10*10*20)
-        net['cls{}_conv'.format(i)] = Conv2D(num_classes, 3, padding='same',
-                                  kernel_initializer='glorot_uniform',
-                                  kernel_regularizer=l2(5e-4),
-                                  bias_initializer=initializers.Constant(value=bias_value),
-                                  name='cls{}_conv'.format(i))(net['final_relu'])
-        net['cls{}_flatten'.format(i)] = Flatten(name='cls{}_flatten'.format(i))(net['cls{}_conv'.format(i)])
-        cls_concate_list.append(net['cls{}_flatten'.format(i)])
-
-        # loc1 header (10*10*4)
-        net['loc{}_offsets'.format(i)] = Conv2D(4, 3, padding='same',
-                                      kernel_initializer='glorot_uniform',
-                                      kernel_regularizer=l2(5e-4),
-                                      name='loc{}_offsets'.format(i))(net['final_relu'])
-        net['loc{}_pred'.format(i)] = input_anchor(name='loc{}_pred'.format(i), anchorsize=anchorsize[i-1])(net['loc{}_offsets'.format(i)])
-        net['loc{}_flatten'.format(i)] = Flatten(name='loc{}_flatten'.format(i))(net['loc{}_pred'.format(i)])
-        loc_concate_list.append(net['loc{}_flatten'.format(i)])
-
-    net['cls_concate'] = Concatenate(axis=1, name='cls_concate')(cls_concate_list)
-    net['loc_concate'] = Concatenate(axis=1, name='loc_concate')(loc_concate_list)
-    net['cls_pred'] = Reshape((-1, num_classes), name='cls_pred')(net['cls_concate'])
-    net['cls_pred'] = Activation('sigmoid', name='cls_pred_final')(net['cls_pred'])
-    net['loc_pred'] = Reshape((-1, 4), name='loc_pred')(net['loc_concate'])
-    return net, num_anchors
-
-
-def onenet_head(input_tensor = Input(shape=(512, 512, 3)), num_classes=20, prior_prob=0.01, backbone='resnet50'):
+def onenet_head(input_tensor = Input(shape=(320, 320, 3)), num_classes=20, prior_prob=0.01, backbone='resnet50'):
     net = Backbone(input_tensor, backbone_name=backbone)
     x = net['o4']
     # -------------------------------#

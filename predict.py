@@ -11,7 +11,7 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 
-from Faster_OneNet import OneNet
+from OneNet import OneNet
 
 device_type = 'GPU'
 if device_type=='GPU':
