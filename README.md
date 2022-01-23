@@ -1,44 +1,4 @@
-class apply_ltrb(Layer):
-    def __init__(self, name=None, **kwargs):
-        super(apply_ltrb, self).__init__(name=name, **kwargs)
-
-    def get_config(self):
-        config = super(apply_ltrb, self).get_config()
-        return config
-
-    def call(self, pred_ltrb):
-        '''
-        pred_ltrb 上的4個value分別是(x1, y1, x2, y2)表示以每個cell為中心，預測出來的框架左上角與右下角的相對距離
-        ltrb(left-up-right-bottom)
-        此函數將預測出來的相對位置換算成絕對位置
-
-        下面是一個框，在cell(cx,cy)取得相對距離(x1,y1,x2,y2)後，換算成絕對位置(cx-x1,cy-y1,cx+x2,cy+y2)
-        (cx-x1,cy-y1)
-          ----------------------------------
-          |          ↑                     |
-          |          |                     |
-          |          |y1                   |
-          |          |                     |
-          |←------(cx,cy)-----------------→|
-          |   x1     |          x2         |
-          |          |                     |
-          |          |                     |
-          |          |y2                   |
-          |          |                     |
-          |          |                     |
-          |          ↓                     |
-          ----------------------------------(cx+x2,cy+y2)
-        '''
-        b, w, h, c = tf.shape(pred_ltrb)[0], tf.shape(pred_ltrb)[1], tf.shape(pred_ltrb)[2], tf.shape(pred_ltrb)[3]
-        ct = tf.cast(tf.transpose(tf.meshgrid(tf.range(0, w), tf.range(0, h))), tf.float32)
-        # locations : w*h*2 這2個 value包含 cx=ct[0], cy=ct[1]
-        locations = tf.concat((ct - pred_ltrb[:, :, :, :2], ct + pred_ltrb[:, :, :, 2:]), axis=-1)
-        return locations
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)## CenterNet:Objects as Points目标检测模型在Tensorflow2当中的实现
----
+Faster OneNet
 
 ## 目录
 1. [性能情况 Performance](#性能情况)
@@ -51,38 +11,32 @@ class apply_ltrb(Layer):
 8. [参考资料 Reference](#Reference)
 
 ## 性能情况
-| 训练数据集 | 权值文件名称 | 测试数据集 | 输入图片大小 | mAP 0.5:0.95 | mAP 0.5 |
-| :-----: | :-----: | :------: | :------: | :------: | :-----: |
-| VOC07+12 | [centernet_resnet50_voc.h5](https://github.com/bubbliiiing/centernet-tf2/releases/download/v1.0/centernet_resnet50_voc.h5) | VOC-Test07 | 512x512 | - | 77.1
-| COCO-Train2017 | [centernet_hourglass_coco.h5](https://github.com/bubbliiiing/centernet-tf2/releases/download/v1.0/centernet_hourglass_coco.h5) | COCO-Val2017 | 512x512 | 39.0 | 57.6 
+| 训练数据集 |                                                           权值文件名称                                                            | 测试数据集 | 输入图片大小  | mAP 0.5:0.95 | mAP 0.5 |
+| :-----: |:---------------------------------------------------------------------------------------------------------------------------:| :------: |:-------:|:------------:| :-----: |
+| VOC07+12 | [faster_onenet_resnet18.h5](https://github.com/simon108018/Faster-OneNet/releases/download/v1.0/faster_onenet_resnet18.h5)  | VOC-Test07 | 320x320 |      -       | -
+| VOC07+12 | [faster_onenet_resnet50.h5](https://github.com/simon108018/Faster-OneNet/releases/download/v1.0/faster_onenet_resnet18.h5)                                                | VOC-Test07 | 320x320 |      -       | -
 
 ## 所需环境
 tensorflow-gpu==2.2.0  
 由于tensorflow2中已经有keras部分，所以不需要额外装keras
 
 ## 注意事项
-代码中的centernet_resnet50_voc.h5是使用voc数据集训练的。    
-代码中的centernet_hourglass_coco.h5是使用voc数据集训练的。   
+代码中的faster_onenet_resnet18.h5是使用voc数据集训练的。    
+代码中的faster_onenet_resnet50.h5是使用voc数据集训练的。   
 **注意不要使用中文标签，文件夹中不要有空格！**     
 **在训练前需要务必在model_data下新建一个txt文档，文档中输入需要分的类，在train.py中将classes_path指向该文件**。     
 
 ## 文件下载 
-训练所需的centernet_resnet50_voc.h5、centernet_hourglass_coco.h5可在百度网盘中下载。    
-链接: https://pan.baidu.com/s/1IAhc33ifrDFQNVItcJqBTg 提取码: gigx    
+训练所需的faster_onenet_resnet18.h5、faster_onenet_resnet50.h5可在上方下載。 
 
-centernet_resnet50_voc.h5是voc数据集的权重。    
-centernet_hourglass_coco.h5是coco数据集的权重。    
+faster_onenet_resnet18.h5是voc数据集的权重。    
+faster_onenet_resnet50.h5是coco数据集的权重。    
 
-VOC数据集下载地址如下：  
-VOC2007+2012训练集    
-链接: https://pan.baidu.com/s/16pemiBGd-P9q2j7dZKGDFA 提取码: eiw9    
-
-VOC2007测试集   
-链接: https://pan.baidu.com/s/1BnMiFwlNwIWG9gsd4jHLig 提取码: dsda   
+請先下載VOC Datasets
 
 ## 预测步骤
 ### a、使用预训练权重
-1. 下载完库后解压，在百度网盘下载centernet_resnet50_voc.h5或者centernet_hourglass_coco.h5，放入model_data，运行predict.py，输入  
+1. 下载完库后解压，在百度网盘下载faster_onenet_resnet18.h5或者faster_onenet_resnet50.h5，放入model_data，运行predict.py，输入  
 ```python
 img/street.jpg
 ```
@@ -92,18 +46,42 @@ img/street.jpg
 2. 在yolo.py文件里面，在如下部分修改model_path和classes_path使其对应训练好的文件；**model_path对应logs文件夹下面的权值文件，classes_path是model_path对应分的类**。  
 ```python
 _defaults = {
-    "model_path"        : 'model_data/centernet_resnet50_voc.h5',
+    #--------------------------------------------------------------------------#
+    #   使用自己训练好的模型进行预测一定要修改model_path和classes_path！
+    #   model_path指向logs文件夹下的权值文件，classes_path指向model_data下的txt
+    #   如果出现shape不匹配，同时要注意训练时的model_path和classes_path参数的修改
+    #--------------------------------------------------------------------------#
+    "model_path"        : 'model_data/faster_onenet_resnet18.h5',
     "classes_path"      : 'model_data/voc_classes.txt',
-    # "model_path"        : 'model_data/centernet_hourglass_coco.h5',
-    # "classes_path"      : 'model_data/coco_classes.txt',
-    "backbone"          : 'resnet50',
-    "model_image_size"  : [512,512,3],
-    "confidence"        : 0.3,
-    # backbone为resnet50时建议设置为True
-    # backbone为hourglass时建议设置为False
+    #--------------------------------------------------------------------------#
+    #   用于选择所使用的模型的主干
+    #   resnet18, resnet50
+    #--------------------------------------------------------------------------#
+    "backbone"          : 'resnet18',
+    #--------------------------------------------------------------------------#
+    #   输入图片的大小
+    #--------------------------------------------------------------------------#
+    "input_shape"       : [320, 320],
+    #--------------------------------------------------------------------------#
+    #   只有得分大于置信度的预测框会被保留下来
+    #--------------------------------------------------------------------------#
+    "confidence"        : 0.2,
+    #---------------------------------------------------------------------#
+    #   非极大抑制所用到的nms_iou大小
+    #---------------------------------------------------------------------#
+    "nms_iou"           : 0.3,
+    #--------------------------------------------------------------------------#
+    #   是否进行非极大抑制，可以根据检测效果自行选择
+    #   backbone为resnet50时建议设置为True、backbone为hourglass时建议设置为False
+    #--------------------------------------------------------------------------#
     "nms"               : True,
-    "nms_threhold"      : 0.3,
+    #---------------------------------------------------------------------#
+    #   该变量用于控制是否使用letterbox_image对输入图像进行不失真的resize，
+    #   在多次测试后，发现关闭letterbox_image直接resize的效果更好
+    #---------------------------------------------------------------------#
+    "letterbox_image"   : False,
 }
+
 ```
 3. 运行predict.py，输入  
 ```python
@@ -133,23 +111,22 @@ dog
 ```
 8. 运行train.py即可开始训练。
 
-## 评估步骤
-评估过程可参考视频https://www.bilibili.com/video/BV1zE411u7Vw  
-步骤是一样的，不需要自己再建立get_dr_txt.py、get_gt_txt.py等文件。  
-1. 本文使用VOC格式进行评估。  
-2. 评估前将标签文件放在VOCdevkit文件夹下的VOC2007文件夹下的Annotation中。  
-3. 评估前将图片文件放在VOCdevkit文件夹下的VOC2007文件夹下的JPEGImages中。  
-4. 在评估前利用voc2centernet.py文件生成对应的txt，评估用的txt为VOCdevkit/VOC2007/ImageSets/Main/test.txt，需要注意的是，如果整个VOC2007里面的数据集都是用于评估，那么直接将trainval_percent设置成0即可。  
-5. 在yolo.py文件里面，在如下部分修改model_path和classes_path使其对应训练好的文件；**model_path对应logs文件夹下面的权值文件，classes_path是model_path对应分的类**。  
-6. 运行get_dr_txt.py和get_gt_txt.py，在./input/detection-results和./input/ground-truth文件夹下生成对应的txt。  
-7. 运行get_map.py即可开始计算模型的mAP。
+## 评估步骤 
+### a、评估VOC07+12的测试集
+1. 本文使用VOC格式进行评估。VOC07+12已经划分好了测试集，无需利用voc_annotation.py生成ImageSets文件夹下的txt。
+2. 在centernet.py里面修改model_path以及classes_path。**model_path指向训练好的权值文件，在logs文件夹里。classes_path指向检测类别所对应的txt。**  
+3. 运行get_map.py即可获得评估结果，评估结果会保存在map_out文件夹中。
 
-## mAP目标检测精度计算更新
-更新了get_gt_txt.py、get_dr_txt.py和get_map.py文件。  
-get_map文件克隆自https://github.com/Cartucho/mAP  
-具体mAP计算过程可参考：https://www.bilibili.com/video/BV1zE411u7Vw
+### b、评估自己的数据集
+1. 本文使用VOC格式进行评估。  
+2. 如果在训练前已经运行过voc_annotation.py文件，代码会自动将数据集划分成训练集、验证集和测试集。如果想要修改测试集的比例，可以修改voc_annotation.py文件下的trainval_percent。trainval_percent用于指定(训练集+验证集)与测试集的比例，默认情况下 (训练集+验证集):测试集 = 9:1。train_percent用于指定(训练集+验证集)中训练集与验证集的比例，默认情况下 训练集:验证集 = 9:1。
+3. 利用voc_annotation.py划分测试集后，前往get_map.py文件修改classes_path，classes_path用于指向检测类别所对应的txt，这个txt和训练时的txt一样。评估自己的数据集必须要修改。
+4. 在centernet.py里面修改model_path以及classes_path。**model_path指向训练好的权值文件，在logs文件夹里。classes_path指向检测类别所对应的txt。**  
+5. 运行get_map.py即可获得评估结果，评估结果会保存在map_out文件夹中。
 
 ## Reference
+https://github.com/bubbliiiing/centernet-tf2
+https://github.com/PeizeSun/OneNet
 https://github.com/xuannianz/keras-CenterNet      
 https://github.com/see--/keras-centernet      
-https://github.com/xingyizhou/CenterNet    
+https://github.com/xingyizhou/CenterNet 

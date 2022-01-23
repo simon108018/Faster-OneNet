@@ -40,7 +40,6 @@ class OneNet(object):
         #   如果出现shape不匹配，同时要注意训练时的model_path和classes_path参数的修改
         #--------------------------------------------------------------------------#
         "model_path"        : 'model_data/faster_onenet_resnet50.h5',
-        # "classes_path"      : 'model_data/coco_classes.txt',
         "classes_path"      : 'model_data/voc_classes.txt',
         #--------------------------------------------------------------------------#
         #   輸入模型結構 "faster_onenet" or "onenet"
