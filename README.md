@@ -21,22 +21,22 @@ tensorflow-gpu==2.2.0
 由于tensorflow2中已经有keras部分，所以不需要额外装keras
 
 ## 注意事项
-代码中的faster_onenet_resnet18.h5是使用voc数据集训练的。    
-代码中的faster_onenet_resnet50.h5是使用voc数据集训练的。   
+代码中的onenet_resnet18.h5是使用voc数据集训练的。    
+代码中的onenet_resnet50.h5是使用voc数据集训练的。   
 **注意不要使用中文标签，文件夹中不要有空格！**     
 **在训练前需要务必在model_data下新建一个txt文档，文档中输入需要分的类，在train.py中将classes_path指向该文件**。     
 
 ## 文件下载 
-训练所需的faster_onenet_resnet18.h5、faster_onenet_resnet50.h5可在上方下載。 
+训练所需的onenet_resnet18.h5、onenet_resnet50.h5可在上方下載。 
 
-faster_onenet_resnet18.h5是voc数据集的权重。    
-faster_onenet_resnet50.h5是coco数据集的权重。    
+onenet_resnet18.h5是voc数据集的权重。    
+onenet_resnet50.h5是coco数据集的权重。    
 
 請先下載VOC Datasets
 
 ## 预测步骤
 ### a、使用预训练权重
-1. 下载完库后解压，在百度网盘下载faster_onenet_resnet18.h5或者faster_onenet_resnet50.h5，放入model_data，运行predict.py，输入  
+1. 下载完库后解压，在百度网盘下载onenet_resnet18.h5或者onenet_resnet50.h5，放入model_data，运行predict.py，输入  
 ```python
 img/street.jpg
 ```
@@ -51,7 +51,7 @@ _defaults = {
     #   model_path指向logs文件夹下的权值文件，classes_path指向model_data下的txt
     #   如果出现shape不匹配，同时要注意训练时的model_path和classes_path参数的修改
     #--------------------------------------------------------------------------#
-    "model_path"        : 'model_data/faster_onenet_resnet18.h5',
+    "model_path"        : 'model_data/onenet_resnet18.h5',
     "classes_path"      : 'model_data/voc_classes.txt',
     #--------------------------------------------------------------------------#
     #   用于选择所使用的模型的主干
