@@ -6,8 +6,11 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 from tensorflow.keras.callbacks import (EarlyStopping, ReduceLROnPlateau,
                                         TensorBoard)
-from utils.utils import ModelCheckpoint
-from nets.data_generator import Generator
+from utils.utils import get_classes
+from utils.callbacks import (ExponentDecayScheduler, LossHistory,
+                             ModelCheckpoint)
+# from nets.data_generator import Generator
+from utils.dataloader import OneNetDatasets
 from nets.build_model import build_model
 
 gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
@@ -30,16 +33,6 @@ def new_log(logdir):
     return newlog
 
 
-#---------------------------------------------------#
-#   获得类
-#---------------------------------------------------#
-def get_classes(classes_path):
-    '''loads the classes'''
-    with open(classes_path) as f:
-        class_names = f.readlines()
-    class_names = [c.strip() for c in class_names]
-    return class_names
-
 #----------------------------------------------------#
 #   检测精度mAP和pr曲线计算参考视频
 #   https://www.bilibili.com/video/BV1zE411u7Vw
@@ -54,19 +47,22 @@ if __name__ == "__main__":
     #   classes_path对应的txt的内容
     #   修改成自己需要分的类
     #-----------------------------#
-    structure = 'ssd_onenet'
-    classes_path = 'model_data/voc_classes.txt'
+    structure = 'faster_onenet'
+    datasets = 'COCO'
+    if datasets=='COCO':
+        classes_path = 'model_data/coco_classes.txt'
+    else:
+        classes_path = 'model_data/voc_classes.txt'
     #----------------------------------------------------#
     #   获取classes和数量
     #----------------------------------------------------#
-    class_names = get_classes(classes_path)
-    num_classes = len(class_names)
+    class_names, num_classes = get_classes(classes_path)
     #-----------------------------#
     #   主干特征提取网络的选择
     #   resnet18
     #   resnet50
     #-----------------------------#
-    backbone = "resnet50"
+    backbone = "resnet18"
     max_objects = 40
     output_layers = 2
     #------------------------------------------------------#
@@ -74,13 +70,9 @@ if __name__ == "__main__":
     #   训练自己的数据集时提示维度不匹配正常
     #   预测的东西都不一样了自然维度不匹配
     #------------------------------------------------------#
-    path = './logs/{}'.format(structure)
     if not os.path.isdir('./logs/{}'.format(structure)):
-        os.mkdir(path)
-    if backbone == "resnet50":
-        path +='/resnet50'.format(structure)
-    elif backbone == "resnet18":
-        path +='/resnet50'.format(structure)
+        os.mkdir('./logs/{}'.format(structure))
+    path = './logs/{}/{}'.format(structure, backbone)
     if not os.path.isdir(path):
         os.mkdir(path)
     model_path = new_log(path)
@@ -88,7 +80,11 @@ if __name__ == "__main__":
     #----------------------------------------------------#
     #   获得图片路径和标签
     #----------------------------------------------------#
-    annotation_path = '2012_train.txt'
+    datasets = 'COCO'
+    if datasets.lower()=='coco':
+        annotation_path = 'COCO/train2017.txt'
+    else:
+        annotation_path = 'VOCdevkit/2012_train.txt'
     #----------------------------------------------------------------------#
     #   验证集的划分在train.py代码里面进行
     #   2007_test.txt和2007_val.txt里面没有内容是正常的。训练不会使用到。
@@ -113,12 +109,16 @@ if __name__ == "__main__":
         #   early_stopping用于设定早停，val_loss多次不下降自动结束训练，表示模型基本收敛
         # -------------------------------------------------------------------------------#
         logs = path + '/' + datetime.now().strftime("%Y%m%d-%H%M%S")
-        # logs = path + '/20211207-063814'
         logging = TensorBoard(log_dir=logs, profile_batch=(2,5))
+        loss_history = LossHistory(logs)
         checkpoint = ModelCheckpoint(path+'/ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                      monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
         Epoch = Init_Epoch + run_Epoch
-        gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes, max_objects=max_objects)
+        train_dataloader = OneNetDatasets(lines[:num_train], input_shape, Batch_size, num_classes, train=True, max_objects=max_objects)
+        val_dataloader  = OneNetDatasets(lines[num_train:], input_shape, Batch_size, num_classes, train=False, max_objects=max_objects)
+
+        print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, Batch_size))
+        # gen = Generator(Batch_size, lines[:num_train], lines[num_train:], input_shape, num_classes, max_objects=max_objects)
         optimizer = tfa.optimizers.RectifiedAdam(learning_rate=Lr,
                                                  total_steps=num_train // Batch_size * (Epoch - Init_Epoch),
                                                  warmup_proportion=warmup_proportion,
@@ -140,20 +140,26 @@ if __name__ == "__main__":
             loss_weights=loss_weights,
             optimizer=optimizer)
 
-        histogram = model.fit(gen.generate(True),
+        histogram = model.fit(train_dataloader,
                   steps_per_epoch=num_train // Batch_size,
-                  validation_data=gen.generate(False),
+                  validation_data=val_dataloader,
                   validation_steps=num_val // Batch_size,
                   epochs=Epoch,
                   verbose=1,
                   initial_epoch=Init_Epoch,
-                  callbacks=[logging, checkpoint])
+                  callbacks=[logging, checkpoint, loss_history])
         return histogram
 
     #----------------------------------------------------#
     #   freeze
     #----------------------------------------------------#
-    model = build_model(input_shape, num_classes=num_classes, structure=structure, backbone=backbone, max_objects=max_objects, mode='train', output_layers=output_layers)
+    model = build_model(input_shape,
+                        num_classes=num_classes,
+                        structure=structure,
+                        backbone=backbone,
+                        max_objects=max_objects,
+                        mode='train',
+                        output_layers=output_layers)
     model_path = new_log(path)
     if model_path:
         model.load_weights(model_path, by_name=True, skip_mismatch=False)
@@ -161,21 +167,22 @@ if __name__ == "__main__":
 
     Lr = 5e-5
     Batch_size = 12
-    Init_Epoch = 0
-    Epoch = 500
+    Init_Epoch = 1400
+    Epoch = 2
 
     hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.01, min_scale=1, max_objects=max_objects)
 
-    Lr = 5e-6
-    Batch_size = 12
-    Init_Epoch = 500
-    Epoch = 300
 
-    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.0, min_scale=1, max_objects=max_objects)
-
-    Lr = 5e-7
-    Batch_size = 12
-    Init_Epoch = 800
-    Epoch = 200
-
-    hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.0, min_scale=1, max_objects=max_objects)
+    # Lr = 5e-6
+    # Batch_size = 12
+    # Init_Epoch = 700
+    # Epoch = 400
+    #
+    # hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.0, min_scale=1, max_objects=max_objects)
+    #
+    # Lr = 5e-7
+    # Batch_size = 12
+    # Init_Epoch = 1100
+    # Epoch = 300
+    #
+    # hist = fit_model(model, Lr, Batch_size, Init_Epoch, run_Epoch=Epoch, warmup_proportion=0.0, min_scale=1, max_objects=max_objects)
